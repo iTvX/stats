@@ -14,3 +14,17 @@ SMC/smc
 
 Cartfile.resolved
 web
+
+# Private release configuration and signing material.
+.env
+.env.*
+*.keychain
+*.keychain-db
+*.p12
+*.p8
+*.pem
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.log
+__pycache__/

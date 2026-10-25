@@ -1,0 +1,25 @@
+name: Local CI
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: local-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    if: github.repository == 'iTvX/stats' && github.actor == 'iTvX' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, macOS, ARM64, stats-local]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check workflow and release script
+        run: |
+          actionlint .github/workflows/release.yaml .github/workflows/local-ci.yml
+          python3 -m py_compile scripts/release.py
+      - name: Validate source
+        run: python3 Kit/scripts/run-smc-tests.py
+      - name: Build without distribution signing
+        run: xcodebuild build -project Stats.xcodeproj -scheme Stats -configuration Release -destination 'platform=macOS' -derivedDataPath build/CI CODE_SIGNING_ALLOWED=NO

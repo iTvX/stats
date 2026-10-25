@@ -14,7 +14,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-latest
+    if: github.repository == 'exelban/stats'
+    runs-on: [self-hosted, macOS, ARM64, stats-local]
 
     steps:
       - uses: actions/checkout@v7

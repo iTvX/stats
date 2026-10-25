@@ -22,7 +22,7 @@ import Bluetooth
 import Clock
 import Remote
 
-let updater = Updater(github: "exelban/stats", url: "https://api.mac-stats.com/release/latest")
+let updater = Updater(github: "iTvX/stats", url: "https://api.github.com/repos/iTvX/stats/releases/latest")
 var modules: [Module] = [
     CPU(),
     GPU(),

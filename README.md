@@ -1,27 +1,36 @@
+## iTvX fork releases
+
+Download the signed, Apple-notarized universal build from [iTvX/stats Releases](https://github.com/iTvX/stats/releases/latest). Install this fork's DMG once to switch from the upstream distribution. Future in-app updates use this fork's releases.
+
+Every push to `master` automatically builds and publishes a new release on the local `stats-local` runner. The runner starts at login and uses the same private Developer ID Keychain and Apple notarization profile as Mac Switch. No signing credentials are stored in GitHub or this repository.
+
+The release workflow supports `validate_only` for a full signed and notarized build without publishing. See [local release setup](docs/FORK_RELEASES.md).
+
 # Stats
 
-<a href="https://github.com/exelban/stats/releases"><p align="center"><img src="https://github.com/exelban/stats/raw/master/Stats/Supporting%20Files/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="120"></p></a>
+<a href="https://github.com/iTvX/stats/releases"><p align="center"><img src="https://github.com/exelban/stats/raw/master/Stats/Supporting%20Files/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="120"></p></a>
 
-[![Stats](https://cdn.mac-stats.com/assets/images/menus.png)](https://github.com/exelban/stats/releases)
-[![Stats](https://cdn.mac-stats.com/assets/images/popups.png)](https://github.com/exelban/stats/releases)
+[![Stats](https://cdn.mac-stats.com/assets/images/menus.png)](https://github.com/iTvX/stats/releases)
+[![Stats](https://cdn.mac-stats.com/assets/images/popups.png)](https://github.com/iTvX/stats/releases)
 
 macOS system monitor in your menu bar
 
 ## Installation
 ### Manual
-You can download the latest version [here](https://github.com/exelban/stats/releases/latest/download/Stats.dmg).
+You can download the latest version [here](https://github.com/iTvX/stats/releases/latest/download/Stats.dmg).
 This will download a file called `Stats.dmg`. Open it and move the app to the application folder.
 
 ### Homebrew
 To install it using Homebrew, open the Terminal app and type:
 ```bash
-brew install stats
+# For this fork, use the signed DMG above.
+# brew install stats installs the upstream distribution.
 ```
 
 ### Headless (SSH)
 To install Stats remotely over SSH and set it up as a remote monitoring agent, run:
 ```bash
-curl -fsSL https://cdn.mac-stats.com/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/iTvX/stats/master/Kit/scripts/install.sh | bash
 ```
 The script installs the app, enables the Remote module and prints a URL with an authorization code - open it on any device and sign in to your System Stats account to authorize the machine. After that Stats starts streaming metrics to your account and is registered to launch automatically at login and restart if it stops.
 The Mac needs an active user session (a locked screen is fine) to run the app; on a fully headless machine Stats will start at the next login.

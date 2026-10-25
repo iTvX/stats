@@ -28,7 +28,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-latest
+    if: github.repository == 'exelban/stats'
+    runs-on: [self-hosted, macOS, ARM64, stats-local]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
