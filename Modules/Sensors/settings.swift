@@ -13,7 +13,7 @@ import Cocoa
 import Kit
 
 internal class Settings: NSStackView, Settings_v {
-    private var updateIntervalValue: Int = 3
+    private var updateIntervalValue: Int = ReaderDefaults.sensors
     private var hidState: Bool
     private var fanSpeedState: Bool = false
     private var fansSyncState: Bool = false

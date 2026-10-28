@@ -48,7 +48,7 @@ internal class UsageReader: Reader<Battery_Usage> {
             
             let watcher = Unmanaged<UsageReader>.fromOpaque(ctx).takeUnretainedValue()
             if watcher.active {
-                watcher.read()
+                watcher.requestRead()
             }
         }, context)?.takeRetainedValue() else {
             return

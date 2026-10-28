@@ -116,10 +116,10 @@ public class RAM: Module {
         guard self.available else { return }
         
         self.settingsView.callback = { [weak self] in
-            self?.usageReader?.read()
+            self?.usageReader?.requestRead()
         }
         self.settingsView.setInterval = { [weak self] value in
-            self?.processReader?.read()
+            self?.processReader?.requestRead()
             self?.usageReader?.setInterval(value)
         }
         self.settingsView.setTopInterval = { [weak self] value in
@@ -139,9 +139,7 @@ public class RAM: Module {
         self.settingsView.callbackWhenUpdateNumberOfProcesses = { [weak self] in
             self?.popupView.numberOfProcessesUpdated()
             self?.previewView.numberOfProcessesUpdated()
-            DispatchQueue.global(qos: .background).async {
-                self?.processReader?.read()
-            }
+            self?.processReader?.requestRead()
         }
         
         self.setReaders([self.usageReader, self.processReader])

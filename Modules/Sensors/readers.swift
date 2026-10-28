@@ -32,7 +32,7 @@ internal class SensorsReader: Reader<Sensors_List> {
     
     init(callback: @escaping (T?) -> Void = {_ in }) {
         self.unknownSensorsState = Store.shared.bool(key: "Sensors_unknown", defaultValue: false)
-        super.init(.sensors, callback: callback)
+        super.init(.sensors, defaultInterval: ReaderDefaults.sensors, callback: callback)
         
         self.channels = self.getChannels()
         var dict: Unmanaged<CFMutableDictionary>?

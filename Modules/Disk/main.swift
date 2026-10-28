@@ -243,7 +243,7 @@ public class Disk: Module {
         )
         guard self.available else { return }
         
-        self.capacityReader = CapacityReader(.disk) { [weak self] value in
+        self.capacityReader = CapacityReader(.disk, defaultInterval: ReaderDefaults.diskCapacity) { [weak self] value in
             if let value {
                 self?.capacityCallback(value)
             }
@@ -269,11 +269,11 @@ public class Disk: Module {
         
         self.settingsView.selectedDiskHandler = { [weak self] value in
             self?.selectedDisk = value
-            self?.capacityReader?.read()
+            self?.capacityReader?.requestRead()
         }
         self.settingsView.callback = { [weak self] in
-            self?.capacityReader?.read()
-            self?.smartReader?.read()
+            self?.capacityReader?.requestRead()
+            self?.smartReader?.requestRead()
         }
         self.settingsView.setInterval = { [weak self] value in
             self?.capacityReader?.setInterval(value)
@@ -284,9 +284,7 @@ public class Disk: Module {
         self.settingsView.callbackWhenUpdateNumberOfProcesses = { [weak self] in
             self?.popupView.numberOfProcessesUpdated()
             self?.previewView.numberOfProcessesUpdated()
-            DispatchQueue.global(qos: .background).async {
-                self?.processReader?.read()
-            }
+            self?.processReader?.requestRead()
         }
         
         self.setReaders([self.capacityReader, self.activityReader, self.processReader, self.smartReader])

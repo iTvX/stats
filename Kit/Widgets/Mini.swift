@@ -97,12 +97,14 @@ public class Mini: WidgetWrapper {
         var colorZones: colorZones = (0.6, 0.8)
         var label: String = ""
         var suffix: String = ""
+        var colorState = SColor.monochrome
         self.queue.sync {
             value = self._value
             pressureLevel = self._pressureLevel
             colorZones = self._colorZones
             label = self._label
             suffix = self._suffix
+            colorState = self.colorState
         }
         
         let valueSize: CGFloat = self.labelState ? 12 : 14
@@ -127,12 +129,12 @@ public class Mini: WidgetWrapper {
         }
         
         var color: NSColor = .controlAccentColor
-        switch self.colorState {
+        switch colorState {
         case .systemAccent: color = .controlAccentColor
         case .utilization: color = value.usageColor(zones: colorZones, reversed: self.title == "BAT")
         case .pressure: color = pressureLevel.pressureColor()
         case .monochrome: color = (isDarkMode ? NSColor.white : NSColor.black)
-        default: color = self.colorState.additional as? NSColor ?? .controlAccentColor
+        default: color = colorState.additional as? NSColor ?? .controlAccentColor
         }
         
         let stringAttributes = [
@@ -141,17 +143,24 @@ public class Mini: WidgetWrapper {
             NSAttributedString.Key.paragraphStyle: style
         ]
         let rect = CGRect(x: origin.x, y: origin.y, width: self.width - (Constants.Widget.margin.x*2), height: valueSize+1)
-        let str = NSAttributedString.init(string: "\(Int(value.rounded(toPlaces: 2) * 100))\(suffix)", attributes: stringAttributes)
+        let presentation = MiniValuePresentation(value: value, utilizationColor: colorState == .utilization,
+                                                 orange: colorZones.orange, red: colorZones.red)
+        let str = NSAttributedString.init(string: "\(presentation.text)\(suffix)", attributes: stringAttributes)
         str.draw(with: rect)
         
         self.setWidth(width)
     }
     
+    private func presentation(for value: Double) -> MiniValuePresentation {
+        MiniValuePresentation(value: value, utilizationColor: self.colorState == .utilization,
+                              orange: self._colorZones.orange, red: self._colorZones.red)
+    }
+
     public func setValue(_ newValue: Double) {
         let updated = self.queue.sync { () -> Bool in
-            guard self._value != newValue else { return false }
+            let previous = self.presentation(for: self._value)
             self._value = newValue
-            return true
+            return previous != self.presentation(for: newValue)
         }
         guard updated else { return }
         DispatchQueue.main.async(execute: {
@@ -163,7 +172,7 @@ public class Mini: WidgetWrapper {
         let updated = self.queue.sync { () -> Bool in
             guard self._pressureLevel != newPressureLevel else { return false }
             self._pressureLevel = newPressureLevel
-            return true
+            return self.colorState == .pressure
         }
         guard updated else { return }
         DispatchQueue.main.async(execute: {
@@ -189,9 +198,9 @@ public class Mini: WidgetWrapper {
     
     public func setColorZones(_ newColorZones: colorZones) {
         let updated = self.queue.sync { () -> Bool in
-            guard self._colorZones != newColorZones else { return false }
+            let previous = self.presentation(for: self._value)
             self._colorZones = newColorZones
-            return true
+            return previous != self.presentation(for: self._value)
         }
         guard updated else { return }
         DispatchQueue.main.async(execute: {
@@ -238,7 +247,9 @@ public class Mini: WidgetWrapper {
     
     @objc private func toggleColor(_ sender: NSMenuItem) {
         guard let key = sender.representedObject as? String else { return }
-        self.colorState = SColor.fromString(key, defaultValue: self.colorState)
+        self.queue.sync {
+            self.colorState = SColor.fromString(key, defaultValue: self.colorState)
+        }
         Store.shared.set(key: "\(self.title)_\(self.type.rawValue)_color", value: self.colorState.key)
         self.display()
     }

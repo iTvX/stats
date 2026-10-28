@@ -207,14 +207,12 @@ public class Network: Module {
             guard let self else { return }
             self.popupView.numberOfProcessesUpdated()
             self.previewView.numberOfProcessesUpdated()
-            DispatchQueue.global(qos: .background).async { [weak self] in
-                self?.processReader?.read()
-            }
+            self.processReader?.requestRead()
         }
         
         self.settingsView.callback = { [weak self] in
             self?.usageReader?.getDetails()
-            self?.usageReader?.read()
+            self?.usageReader?.requestRead()
         }
         self.settingsView.usageResetCallback = { [weak self] in
             self?.setUsageReset()
