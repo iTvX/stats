@@ -10,7 +10,6 @@ import plistlib
 import re
 import shutil
 import subprocess
-import tempfile
 
 APP = "Stats"
 REPOSITORY = "iTvX/stats"
@@ -117,19 +116,13 @@ def package(value, number, tag, keychain, identity, team, archive):
         raise ValueError("The built app version does not match the release")
     for architecture in ("arm64", "x86_64"):
         run("lipo", app / f"Contents/MacOS/{APP}", "-verify_arch", architecture)
-    if APP == "Stats":
-        widget = app / "Contents/PlugIns/WidgetsExtension.appex"
-        widget_info = plistlib.loads((widget / "Contents/Info.plist").read_bytes())
-        if (widget_info["CFBundleShortVersionString"], widget_info["CFBundleVersion"]) != (value, number) or info["TeamId"] != team:
-            raise ValueError("Widget version or shared preferences signing team is incorrect")
-        run("codesign", "--verify", "--strict", widget)
-        helper = app / "Contents/Library/LaunchServices/eu.exelban.Stats.SMC.Helper"
-        run("codesign", "--verify", "--strict", "-R", f'=anchor apple generic and certificate leaf[subject.OU] = "{team}"', helper)
-    else:
-        expected_feed = f"https://github.com/{REPOSITORY}/releases/download/appcast/appcast.xml"
-        key = output(Path(os.environ["SPARKLE_BIN_DIR"]) / "generate_keys", "--account", os.environ["SPARKLE_ACCOUNT"], "-p")
-        if info["SUFeedURL"] != expected_feed or info["SUPublicEDKey"] != key:
-            raise ValueError("The update feed or public signing key is incorrect")
+    widget = app / "Contents/PlugIns/WidgetsExtension.appex"
+    widget_info = plistlib.loads((widget / "Contents/Info.plist").read_bytes())
+    if (widget_info["CFBundleShortVersionString"], widget_info["CFBundleVersion"]) != (value, number) or info["TeamId"] != team:
+        raise ValueError("Widget version or shared preferences signing team is incorrect")
+    run("codesign", "--verify", "--strict", widget)
+    helper = app / "Contents/Library/LaunchServices/eu.exelban.Stats.SMC.Helper"
+    run("codesign", "--verify", "--strict", "-R", f'=anchor apple generic and certificate leaf[subject.OU] = "{team}"', helper)
     run("codesign", "--verify", "--deep", "--strict", app)
     zip_path = BUILD / f"{APP}.zip"
     zip_path.unlink(missing_ok=True)
@@ -153,8 +146,6 @@ def package(value, number, tag, keychain, identity, team, archive):
     notarize(dmg)
     run("xcrun", "stapler", "staple", dmg)
     run("xcrun", "stapler", "validate", dmg)
-    if APP == "Thaw":
-        appcast(tag, zip_path)
     (BUILD / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in (dmg, zip_path)))
     (BUILD / "RELEASE_NOTES.md").write_text(
         f"{APP} {value} — iTvX fork\n\nUniversal macOS build for Apple silicon and Intel. "
@@ -166,23 +157,6 @@ def package(value, number, tag, keychain, identity, team, archive):
     print(f"Verified release artifacts: {BUILD}", flush=True)
 
 
-def appcast(tag, zip_path):
-    feed = BUILD / "feed"
-    if feed.exists():
-        shutil.rmtree(feed)
-    feed.mkdir()
-    shutil.copy2(zip_path, feed / zip_path.name)
-    releases = json.loads(output("gh", "api", f"repos/{REPOSITORY}/releases?per_page=100"))
-    if any(item["tag_name"] == "appcast" for item in releases):
-        run("gh", "release", "download", "appcast", "--repo", REPOSITORY, "--pattern", "appcast.xml", "--dir", feed)
-    tools = Path(os.environ["SPARKLE_BIN_DIR"])
-    account = os.environ["SPARKLE_ACCOUNT"]
-    run(tools / "generate_appcast", "--account", account, "--maximum-versions", "0", "--maximum-deltas", "0",
-        "--download-url-prefix", f"https://github.com/{REPOSITORY}/releases/download/{tag}/", "--link", f"https://github.com/{REPOSITORY}/releases", feed)
-    run(tools / "sign_update", "--account", account, feed / "appcast.xml")
-    run(tools / "sign_update", "--account", account, "--verify", feed / "appcast.xml")
-
-
 def publish():
     value, _, tag = release_metadata()
     commit = output("git", "rev-parse", "HEAD")
@@ -192,17 +166,6 @@ def publish():
     run("gh", "release", "create", tag, *assets, "--repo", REPOSITORY, "--verify-tag", "--draft",
         "--title", f"{APP} {value}", "--notes-file", BUILD / "RELEASE_NOTES.md")
     run("gh", "release", "edit", tag, "--repo", REPOSITORY, "--draft=false", "--latest")
-    if APP == "Thaw":
-        releases = json.loads(output("gh", "api", f"repos/{REPOSITORY}/releases?per_page=100"))
-        if not any(item["tag_name"] == "appcast" for item in releases):
-            run("gh", "release", "create", "appcast", BUILD / "feed/appcast.xml", "--repo", REPOSITORY,
-                "--target", commit, "--title", "Thaw update feed", "--notes", "Signed update feed for iTvX/Thaw.", "--prerelease", "--latest=false")
-        else:
-            run("gh", "release", "upload", "appcast", BUILD / "feed/appcast.xml", "--repo", REPOSITORY, "--clobber")
-        with tempfile.TemporaryDirectory() as directory:
-            run("gh", "release", "download", "appcast", "--repo", REPOSITORY, "--pattern", "appcast.xml", "--dir", directory)
-            if (Path(directory) / "appcast.xml").read_bytes() != (BUILD / "feed/appcast.xml").read_bytes():
-                raise ValueError("Published update feed does not match the verified appcast")
     print(output("gh", "release", "view", tag, "--repo", REPOSITORY, "--json", "url", "--jq", ".url"))
 
 
