@@ -23,5 +23,5 @@ jobs:
         run: python3 Kit/scripts/run-smc-tests.py
       - name: Build without distribution signing
         run: xcodebuild build -project Stats.xcodeproj -scheme Stats -configuration Release -destination 'platform=macOS' -derivedDataPath build/CI CODE_SIGNING_ALLOWED=NO
-      - name: Test reader scheduling and actual widgets in isolation
+      - name: Test sampling, history, storage, and widgets in isolation
         run: python3 Kit/scripts/run-performance-tests.py --products build/CI/Build/Products/Release

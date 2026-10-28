@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Test production scheduling and widgets without launching Stats or reading its preferences.
+"""Test production sampling, history, storage and widgets without launching Stats.
 
-Run without arguments for isolated Reader tests. Pass --products pointing at
+Run without arguments for isolated core tests. Pass --products pointing at
 the Release build products to also test the actual Kit.framework views.
 """
 import argparse
@@ -61,6 +61,15 @@ def run(products=None):
             ROOT / "Kit/plugins/ReaderWorkQueue.swift", ROOT / "Kit/plugins/Repeater.swift",
             ROOT / "Kit/module/reader.swift", ROOT / "Kit/Widgets/MiniValuePresentation.swift",
             TESTS / "Support.swift",
+        ])
+        execute(TESTS / "ChartHistoryTests.swift", "ChartHistoryTests", [
+            ROOT / "Kit/plugins/ChartHistoryBuffer.swift",
+        ])
+        execute(TESTS / "IOServiceTests.swift", "IOServiceTests", [
+            ROOT / "Kit/plugins/IOServiceProperties.swift",
+        ])
+        execute(TESTS / "StorageTests.swift", "StorageTests", [
+            ROOT / "Kit/plugins/DB.swift", TESTS / "StorageSupport.swift",
         ])
         if products:
             products = Path(products).resolve()

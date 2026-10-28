@@ -100,7 +100,10 @@ internal class InfoReader: Reader<GPUs> {
     }
     
     public override func read() {
-        guard let accelerators = fetchIOService(kIOAcceleratorClassName) else {
+        // Keep discovery fresh for device changes; copy only the properties used below.
+        guard let accelerators = fetchIOService(kIOAcceleratorClassName, properties: [
+            "IOClass", "IOPCIMatch", "IOPCIPrimaryMatch", "PerformanceStatistics", "AGCInfo"
+        ]) else {
             return
         }
         var devices = self.devices

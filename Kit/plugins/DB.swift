@@ -79,6 +79,8 @@ public class DB {
     
     private var lldb: LLDB? = nil
     private let queue = DispatchQueue(label: "eu.exelban.db")
+    private let snapshotWriteLock = NSLock()
+    private let snapshotClock: () -> Date
     private let ttl: Int = 60*60
     
     private let historyQueue = DispatchQueue(label: "eu.exelban.db.history")
@@ -101,6 +103,7 @@ public class DB {
     }
     
     init() {
+        self.snapshotClock = Date.init
         let fileManager = FileManager.default
         let supportPath = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Stats")
         let tmpPath = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Stats")
@@ -116,6 +119,12 @@ public class DB {
         
         print("ERROR INITIALIZE DB")
     }
+
+    // Allows isolated storage tests without opening the user's database or timers.
+    internal init(storage: LLDB, now: @escaping () -> Date = Date.init) {
+        self.lldb = storage
+        self.snapshotClock = now
+    }
     
     deinit {
         self.historyTimer?.cancel()
@@ -130,20 +139,22 @@ public class DB {
     }
     
     public func insert(key: String, value: Codable, force: Bool = false) {
-        self.queue.sync { self._values[key] = value }
-        guard let blobData = try? JSONEncoder().encode(value), let str = String(data: blobData, encoding: .utf8) else { return }
-        
-        let now = Date()
+        // Keep normal and forced saves ordered without holding the cache queue
+        // during encoding or disk I/O. Throttled samples still update the cache.
+        self.snapshotWriteLock.lock()
+        defer { self.snapshotWriteLock.unlock() }
+        let now = self.snapshotClock()
         let shouldWrite: Bool = self.queue.sync {
-            if !force, let ts = self._writeTS[key], (now.timeIntervalSince1970-ts.timeIntervalSince1970) < 30 {
+            self._values[key] = value
+            if !force, let ts = self._writeTS[key], now >= ts, now.timeIntervalSince(ts) < 30 {
                 return false
             }
-            self._writeTS[key] = now
             return true
         }
         guard shouldWrite else { return }
-        
-        self.lldb?.insert(key, value: str)
+        guard let blobData = try? JSONEncoder().encode(value), let str = String(data: blobData, encoding: .utf8),
+              self.lldb?.insert(key, value: str) == true else { return }
+        self.queue.sync { self._writeTS[key] = now }
     }
     
     public func findOne<T: Decodable>(_ dynamicType: T.Type, key: String) -> T? {

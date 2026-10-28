@@ -792,43 +792,6 @@ public struct TopProcess: Codable, Process_p {
     }
 }
 
-public func fetchIOService(_ name: String) -> [NSDictionary]? {
-    var iterator: io_iterator_t = io_iterator_t()
-    var obj: io_registry_entry_t = 1
-    var list: [NSDictionary] = []
-    
-    let result = IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(name), &iterator)
-    if result != kIOReturnSuccess {
-        print("Error IOServiceGetMatchingServices(): " + (String(cString: mach_error_string(result), encoding: String.Encoding.ascii) ?? "unknown error"))
-        return nil
-    }
-    
-    while obj != 0 {
-        obj = IOIteratorNext(iterator)
-        if let props = getIOProperties(obj) {
-            list.append(props)
-        }
-        IOObjectRelease(obj)
-    }
-    IOObjectRelease(iterator)
-    
-    return list.isEmpty ? nil : list
-}
-
-public func getIOProperties(_ entry: io_registry_entry_t) -> NSDictionary? {
-    var properties: Unmanaged<CFMutableDictionary>? = nil
-    
-    if IORegistryEntryCreateCFProperties(entry, &properties, kCFAllocatorDefault, 0) != kIOReturnSuccess {
-        return nil
-    }
-    
-    defer {
-        properties?.release()
-    }
-    
-    return properties?.takeUnretainedValue()
-}
-
 internal func getIOName(_ entry: io_registry_entry_t) -> String? {
     let pointer = UnsafeMutablePointer<io_name_t>.allocate(capacity: 1)
     defer { pointer.deallocate() }
