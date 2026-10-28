@@ -192,7 +192,7 @@ public class Remote: Module {
         }
         
         self.settingsView.toggleCallback = { [weak self] in
-            self?.dataReader?.read()
+            self?.dataReader?.requestRead()
         }
         
         NotificationCenter.default.addObserver(self, selector: #selector(self.handleRemoteState), name: .remoteState, object: nil)
@@ -210,7 +210,7 @@ public class Remote: Module {
             guard let self else { return }
             self.popupView.authorizationStatus(auth)
             if auth {
-                self.dataReader?.read()
+                self.dataReader?.requestRead()
             } else {
                 self.dataReader?.cancelPendingRead()
             }

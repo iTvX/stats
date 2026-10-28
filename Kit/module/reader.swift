@@ -11,6 +11,11 @@
 
 import Cocoa
 
+public enum ReaderDefaults {
+    public static let sensors = 3
+    public static let diskCapacity = 10
+}
+
 public protocol Reader_p {
     var popup: Bool { get }
     var preview: Bool { get }
@@ -18,6 +23,7 @@ public protocol Reader_p {
     
     func setup()
     func read()
+    func requestRead()
     func terminate()
     
     func start()
@@ -67,6 +73,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     private let module: ModuleType
     private var history: Bool
     private var repeatTask: Repeater?
+    private let readRequests = ReaderWorkQueue()
     private var locked: Bool = true
     private var initlizalized: Bool = false
     
@@ -84,11 +91,12 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     private var alignGeneration: UInt = 0
     private let alignQueue = DispatchQueue(label: "eu.exelban.readerAlignQueue")
     
-    public init(_ module: ModuleType, popup: Bool = false, preview: Bool = false, history: Bool = false, callback: @escaping (T?) -> Void = {_ in }) {
+    public init(_ module: ModuleType, popup: Bool = false, preview: Bool = false, history: Bool = false, defaultInterval: Int = 1, callback: @escaping (T?) -> Void = {_ in }) {
         self.popup = popup
         self.preview = preview
         self.module = module
         self.history = history
+        self.defaultInterval = defaultInterval
         self.callbackHandler = callback
         
         super.init()
@@ -129,6 +137,20 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
         }
     }
     
+    /// Schedules manual and timer refreshes on the same background queue.
+    /// A burst keeps at most one trailing refresh while a read is in flight.
+    public func requestRead() {
+        self.readRequests.request { [weak self] in self?.read() }
+    }
+
+    private func requestActiveRead() {
+        guard self.active else { return }
+        self.readRequests.request { [weak self] in
+            guard let self, self.active else { return }
+            self.read()
+        }
+    }
+
     open func read() {}
     open func setup() {}
     open func terminate() {}
@@ -155,9 +177,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
     
     open func start() {
         if (self.popup || self.preview || self.sleep) && self.locked {
-            DispatchQueue.global(qos: .background).async {
-                self.read()
-            }
+            self.requestRead()
             return
         }
         
@@ -171,7 +191,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
                 }
             } else if !self.initlizalized {
                 self.startNormalRepeater()
-                DispatchQueue.global(qos: .background).async { self.read() }
+                self.requestRead()
                 self.repeatTask?.start()
                 self.initlizalized = true
             } else {
@@ -186,6 +206,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
             self.repeatTask?.pause()
         }
         self.active = false
+        self.readRequests.cancelPending()
         self.historyQueue.sync { self.lastHistoryRead = nil }
     }
     
@@ -197,6 +218,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
             self.initlizalized = false
         }
         self.active = false
+        self.readRequests.cancelPending()
         self.historyQueue.sync { self.lastHistoryRead = nil }
     }
     
@@ -238,7 +260,7 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
         }
         
         self.repeatTask = Repeater(seconds: Int(interval)) { [weak self] in
-            self?.read()
+            self?.requestActiveRead()
         }
     }
     
@@ -254,9 +276,9 @@ open class Reader<T: Codable>: NSObject, ReaderInternal_p {
         self.alignQueue.asyncAfter(deadline: .now() + self.delayToNextSecondBoundary()) { [weak self] in
             guard let self, self.alignGeneration == generation, self.repeatTask == nil else { return }
 
-            DispatchQueue.global(qos: .background).async { self.read() }
+            self.requestRead()
             self.repeatTask = Repeater(seconds: Int(interval)) { [weak self] in
-                self?.read()
+                self?.requestActiveRead()
             }
             self.repeatTask?.start()
         }

@@ -35,7 +35,7 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     private let title: String
     
     private var removableState: Bool = false
-    private var updateIntervalValue: Int = 10
+    private var updateIntervalValue: Int = ReaderDefaults.diskCapacity
     private var updateSMARTIntervalValue: Int = 30
     private var numberOfProcesses: Int = 5
     private var baseValue: String = "byte"

@@ -51,7 +51,7 @@ public class Sensors: Module {
         self.notificationsView.setup(self.sensorsReader?.list.sensors)
         
         self.settingsView.callback = { [weak self] in
-            self?.sensorsReader?.read()
+            self?.sensorsReader?.requestRead()
         }
         self.settingsView.setInterval = { [weak self] value in
             self?.sensorsReader?.setInterval(value)
@@ -81,7 +81,7 @@ public class Sensors: Module {
         self.selectedSensor = Store.shared.string(key: "\(ModuleType.sensors.stringValue)_sensor", defaultValue: self.selectedSensor)
         self.settingsView.selectedHandler = { [weak self] value in
             self?.selectedSensor = value
-            self?.sensorsReader?.read()
+            self?.sensorsReader?.requestRead()
         }
         
         self.setReaders([self.sensorsReader])

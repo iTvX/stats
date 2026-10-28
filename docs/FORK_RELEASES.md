@@ -20,4 +20,6 @@ The dedicated runner uses label `stats-local`. Its service starts in the logged-
 
 Build logs and notarization receipts remain under ignored `build/`. The workflow does not install or launch the app, reset privacy permissions, change preferences, or modify the live menu bar. Initial installation is manual because upstream builds trust a different signing identity.
 
+Local CI also runs `python3 Kit/scripts/run-performance-tests.py --products build/CI/Build/Products/Release` after building. The suite compiles the production reader, timer and work queue against in-memory persistence and remote-delivery stubs, then tests Mini and Stack views from the actual built Kit framework in a temporary, windowless test bundle. It never launches Stats or reads its preferences. Running the script without `--products` runs only the isolated reader and presentation tests; the release workflow runs those checks before archiving.
+
 Stats queries the GitHub Releases API for iTvX/stats and downloads the signed `Stats.dmg`. Its installer rejects a replacement app signed by a different team. The app, widget, SMC helper, and SMC tool use this fork's signing team. App and widget share the same version/build and application group. Upstream service and donation links are retained where they are unrelated to app distribution.

@@ -36,6 +36,7 @@ jobs:
           python3 -m py_compile scripts/release.py
           actionlint .github/workflows/release.yaml .github/workflows/local-ci.yml
           python3 Kit/scripts/run-smc-tests.py
+          python3 Kit/scripts/run-performance-tests.py
       - name: Resolve next release version
         id: release
         run: python3 scripts/release.py version

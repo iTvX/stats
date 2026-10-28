@@ -106,7 +106,7 @@ public class Bluetooth: Module {
         }
         
         self.settingsView.callback = { [weak self] in
-            self?.devicesReader?.read()
+            self?.devicesReader?.requestRead()
         }
         
         self.setReaders([self.devicesReader])

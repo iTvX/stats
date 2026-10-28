@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A103AA020000000000000001 /* MiniValuePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA020000000000000002 /* MiniValuePresentation.swift */; };
+		A103AA010000000000000001 /* ReaderWorkQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA010000000000000002 /* ReaderWorkQueue.swift */; };
 		4A05F9BD83C04F70BFFF7F37 /* Kit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 369463B2B7EA4AF0A895A9B6 /* Kit.swift */; };
 		5C038CF62D86EE8A00516809 /* SystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C038CF52D86EE8700516809 /* SystemStats.swift */; };
 		5C044F7A2B3DE6F3005F6951 /* portal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C044F792B3DE6F3005F6951 /* portal.swift */; };
@@ -536,6 +538,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A103AA020000000000000002 /* MiniValuePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniValuePresentation.swift; sourceTree = "<group>"; };
+		A103AA010000000000000002 /* ReaderWorkQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderWorkQueue.swift; sourceTree = "<group>"; };
 		0192A7ED2B017E190056F918 /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hi; path = hi.lproj/Localizable.strings; sourceTree = "<group>"; };
 		13BE56042D0E6963001C58EC /* en-AU */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "en-AU"; path = "en-AU.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		2658929724FC0F3B00FB3B6A /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
@@ -1121,6 +1125,7 @@
 			isa = PBXGroup;
 			children = (
 				9A2847592666AA2700EC1F6D /* Mini.swift */,
+				A103AA020000000000000002 /* MiniValuePresentation.swift */,
 				9A2847582666AA2700EC1F6D /* Label.swift */,
 				9A28475D2666AA2700EC1F6D /* BarChart.swift */,
 				9A2847552666AA2700EC1F6D /* LineChart.swift */,
@@ -1305,6 +1310,7 @@
 				9A6EEBBD2685259500897371 /* Logger.swift */,
 				9A5A8446271895B700BC40A4 /* Reachability.swift */,
 				9A302613286A2A3B00B41D57 /* Repeater.swift */,
+				A103AA010000000000000002 /* ReaderWorkQueue.swift */,
 				5C4E8BC62B6EF98800F148B6 /* DB.swift */,
 			);
 			path = plugins;
@@ -2238,6 +2244,7 @@
 				9A28477A2666AA5000EC1F6D /* window.swift in Sources */,
 				9A28475F2666AA2700EC1F6D /* LineChart.swift in Sources */,
 				9A302614286A2A3B00B41D57 /* Repeater.swift in Sources */,
+				A103AA010000000000000001 /* ReaderWorkQueue.swift in Sources */,
 				5C4E8BA12B6EEE8E00F148B6 /* lldb.m in Sources */,
 				9A28480E2666AB3000EC1F6D /* Updater.swift in Sources */,
 				9A5A8447271895B700BC40A4 /* Reachability.swift in Sources */,
@@ -2248,6 +2255,7 @@
 				9A2847642666AA2700EC1F6D /* Battery.swift in Sources */,
 				9A28480B2666AB3000EC1F6D /* Charts.swift in Sources */,
 				9A2847632666AA2700EC1F6D /* Mini.swift in Sources */,
+				A103AA020000000000000001 /* MiniValuePresentation.swift in Sources */,
 				5E828A003074086000DB0CA0 /* Icon.swift in Sources */,
 				5CF2210D2B1E7EAF006C583F /* notifications.swift in Sources */,
 				9A6EEBBE2685259500897371 /* Logger.swift in Sources */,

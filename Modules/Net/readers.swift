@@ -1073,7 +1073,7 @@ internal class ConnectivityReader: Reader<Network_Connectivity> {
             self.closeConn()
             self.openConn()
             self.variablesQueue.sync { self._isPreparing = false }
-            self.read()
+            self.requestRead()
         }
     }
     
