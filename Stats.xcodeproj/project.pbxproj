@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A103AA060000000000000001 /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA060000000000000002 /* CommandRunner.swift */; };
+		A103AA070000000000000001 /* commandReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA070000000000000002 /* commandReader.swift */; };
+		A103AA080000000000000001 /* EnergySampling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA080000000000000002 /* EnergySampling.swift */; };
+		A103AA090000000000000001 /* SharedEnergySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA090000000000000002 /* SharedEnergySource.swift */; };
+		A103AA0A0000000000000001 /* EnergySampler.m in Sources */ = {isa = PBXBuildFile; fileRef = A103AA0A0000000000000002 /* EnergySampler.m */; };
+		A103AA0B0000000000000001 /* EnergySampler.h in Headers */ = {isa = PBXBuildFile; fileRef = A103AA0B0000000000000002 /* EnergySampler.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		A103AA0C0000000000000001 /* libIOReport.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C1E45552D11D66200525864 /* libIOReport.tbd */; };
 		A103AA050000000000000001 /* LineChartData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA050000000000000002 /* LineChartData.swift */; };
 		A103AA030000000000000001 /* ChartHistoryBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA030000000000000002 /* ChartHistoryBuffer.swift */; };
 		A103AA040000000000000001 /* IOServiceProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA040000000000000002 /* IOServiceProperties.swift */; };
@@ -541,6 +548,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A103AA060000000000000002 /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
+		A103AA070000000000000002 /* commandReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = commandReader.swift; sourceTree = "<group>"; };
+		A103AA080000000000000002 /* EnergySampling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergySampling.swift; sourceTree = "<group>"; };
+		A103AA090000000000000002 /* SharedEnergySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEnergySource.swift; sourceTree = "<group>"; };
+		A103AA0A0000000000000002 /* EnergySampler.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EnergySampler.m; sourceTree = "<group>"; };
+		A103AA0B0000000000000002 /* EnergySampler.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EnergySampler.h; sourceTree = "<group>"; };
 		A103AA050000000000000002 /* LineChartData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineChartData.swift; sourceTree = "<group>"; };
 		A103AA030000000000000002 /* ChartHistoryBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartHistoryBuffer.swift; sourceTree = "<group>"; };
 		A103AA040000000000000002 /* IOServiceProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOServiceProperties.swift; sourceTree = "<group>"; };
@@ -865,6 +878,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A103AA0C0000000000000001 /* libIOReport.tbd in Frameworks */,
 				5C4E8BC42B6EF65E00F148B6 /* libleveldb.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1161,6 +1175,7 @@
 		9A28498D2666AE3400EC1F6D /* module */ = {
 			isa = PBXGroup;
 			children = (
+				A103AA070000000000000002 /* commandReader.swift */,
 				9A2847742666AA5000EC1F6D /* module.swift */,
 				9A2847762666AA5000EC1F6D /* popup.swift */,
 				9A2847782666AA5000EC1F6D /* widget.swift */,
@@ -1308,6 +1323,11 @@
 		9AA81547266A9ACA008C01D0 /* plugins */ = {
 			isa = PBXGroup;
 			children = (
+				A103AA060000000000000002 /* CommandRunner.swift */,
+				A103AA080000000000000002 /* EnergySampling.swift */,
+				A103AA090000000000000002 /* SharedEnergySource.swift */,
+				A103AA0A0000000000000002 /* EnergySampler.m */,
+				A103AA0B0000000000000002 /* EnergySampler.h */,
 				5C038CF52D86EE8700516809 /* SystemStats.swift */,
 				9A2848022666AB2F00EC1F6D /* Store.swift */,
 				9A2848042666AB2F00EC1F6D /* Charts.swift */,
@@ -1443,6 +1463,7 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A103AA0B0000000000000001 /* EnergySampler.h in Headers */,
 				5C4E8BE92B71031A00F148B6 /* Kit.h in Headers */,
 				5C4E8BBF2B6EEEE800F148B6 /* db.h in Headers */,
 				5C4E8BB12B6EEEE800F148B6 /* filter_policy.h in Headers */,
@@ -2235,6 +2256,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A103AA060000000000000001 /* CommandRunner.swift in Sources */,
+				A103AA070000000000000001 /* commandReader.swift in Sources */,
+				A103AA080000000000000001 /* EnergySampling.swift in Sources */,
+				A103AA090000000000000001 /* SharedEnergySource.swift in Sources */,
+				A103AA0A0000000000000001 /* EnergySampler.m in Sources */,
 				5C8E001029269C7F0027C75A /* protocol.swift in Sources */,
 				5C621D822B4770D6004ED7AF /* process.swift in Sources */,
 				9AD7F866266F759200E5F863 /* smc.swift in Sources */,

@@ -119,7 +119,7 @@ public class RAM: Module {
             self?.usageReader?.requestRead()
         }
         self.settingsView.setInterval = { [weak self] value in
-            self?.processReader?.requestRead()
+            self?.processReader?.refreshCommand()
             self?.usageReader?.setInterval(value)
         }
         self.settingsView.setTopInterval = { [weak self] value in
@@ -139,7 +139,7 @@ public class RAM: Module {
         self.settingsView.callbackWhenUpdateNumberOfProcesses = { [weak self] in
             self?.popupView.numberOfProcessesUpdated()
             self?.previewView.numberOfProcessesUpdated()
-            self?.processReader?.requestRead()
+            self?.processReader?.refreshCommand()
         }
         
         self.setReaders([self.usageReader, self.processReader])

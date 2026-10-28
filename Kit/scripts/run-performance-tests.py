@@ -25,6 +25,9 @@ def run(products=None):
     with tempfile.TemporaryDirectory(prefix="stats-performance-tests-") as directory:
         build = Path(directory)
         env = dict(os.environ, SWIFT_MODULECACHE_PATH=str(build / "cache"))
+        fixture = build / "command-fixture"
+        subprocess.run(["xcrun", "clang", "-O2", str(TESTS / "CommandFixture.c"), "-o", str(fixture)], check=True, timeout=60)
+        env["STATS_COMMAND_FIXTURE"] = str(fixture)
         command = ["xcrun", "swiftc", "-swift-version", "5", "-g",
                    "-module-cache-path", str(build / "cache"),
                    "-I", str(libraries), "-L", str(libraries),
@@ -75,6 +78,12 @@ def run(products=None):
             ROOT / "Kit/module/reader.swift", ROOT / "Kit/Widgets/MiniValuePresentation.swift",
             TESTS / "Support.swift",
         ])
+        execute(TESTS / "CommandTests.swift", "CommandTests", [
+            ROOT / "Kit/plugins/CommandRunner.swift", ROOT / "Kit/module/commandReader.swift",
+            ROOT / "Kit/plugins/ReaderWorkQueue.swift", ROOT / "Kit/plugins/Repeater.swift",
+            ROOT / "Kit/module/reader.swift", TESTS / "Support.swift",
+        ])
+        execute(TESTS / "EnergyTests.swift", "EnergyTests", [ROOT / "Kit/plugins/EnergySampling.swift"])
         execute(TESTS / "ChartHistoryTests.swift", "ChartHistoryTests", [
             ROOT / "Kit/plugins/ChartHistoryBuffer.swift",
         ])
@@ -101,6 +110,10 @@ def run(products=None):
             ], ["-F", str(products), "-framework", "Kit",
                 "-Xcc", "-I" + str(ROOT / "Kit/lldb"),
                 "-Xlinker", "-rpath", "-Xlinker", str(products)], app=True)
+            execute(TESTS / "SamplingIntegrationTests.swift", "SamplingIntegrationTests", [],
+                    ["-F", str(products), "-framework", "Kit", "-framework", "RAM",
+                     "-Xcc", "-I" + str(ROOT / "Kit/lldb"),
+                     "-Xlinker", "-rpath", "-Xlinker", str(products)], app=True)
 
 
 if __name__ == "__main__":

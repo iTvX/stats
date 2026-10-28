@@ -19,25 +19,17 @@ internal class SensorsReader: Reader<Sensors_List> {
     
     private var lastRead: TimeInterval = ProcessInfo.processInfo.systemUptime
     private let firstRead: TimeInterval = ProcessInfo.processInfo.systemUptime
-    private var lastIOSensorsRead: Date? = nil
     
     private var HIDState: Bool {
         Store.shared.bool(key: "Sensors_hid", defaultValue: false)
     }
     private var unknownSensorsState: Bool
     
-    private var channels: CFMutableDictionary? = nil
-    private var subscription: IOReportSubscriptionRef? = nil
-    private var powers: (CPU: Double, GPU: Double, ANE: Double, RAM: Double, PCI: Double) = (0.0, 0.0, 0.0, 0.0, 0.0)
+    private let energyReader = EnergyRateReader()
     
     init(callback: @escaping (T?) -> Void = {_ in }) {
         self.unknownSensorsState = Store.shared.bool(key: "Sensors_unknown", defaultValue: false)
         super.init(.sensors, defaultInterval: ReaderDefaults.sensors, callback: callback)
-        
-        self.channels = self.getChannels()
-        var dict: Unmanaged<CFMutableDictionary>?
-        self.subscription = IOReportCreateSubscription(nil, self.channels, &dict, 0, nil)
-        dict?.release()
         
         self.list.sensors = self.sensors()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(self.resetHIDSensors), name: NSWorkspace.didWakeNotification, object: nil)
@@ -50,7 +42,13 @@ internal class SensorsReader: Reader<Sensors_List> {
     
     public override func stop() {
         super.stop()
+        self.energyReader.reset()
         self.resetHIDSensors()
+    }
+
+    public override func pause() {
+        super.pause()
+        self.energyReader.reset()
     }
     
     public override func terminate() {
@@ -530,30 +528,6 @@ extension SensorsReader {
 // MARK: - Apple Silicon power sensors
 
 extension SensorsReader {
-    private func getChannels() -> CFMutableDictionary? {
-        let channelNames: [(String, String?)] = [("Energy Model", nil)]
-        
-        var channels: [CFDictionary] = []
-        for (gname, sname) in channelNames {
-            let channel = IOReportCopyChannelsInGroup(gname as CFString?, sname as CFString?, 0, 0, 0)
-            guard let channel = channel?.takeRetainedValue() else { continue }
-            channels.append(channel)
-        }
-        
-        guard let chan = channels.first else { return nil }
-        for i in 1..<channels.count {
-            IOReportMergeChannels(chan, channels[i], nil)
-        }
-        
-        let size = CFDictionaryGetCount(chan)
-        guard let channel = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, size, chan),
-              let chan = channel as? [String: Any], chan["IOReportChannels"] != nil else {
-            return nil
-        }
-        
-        return channel
-    }
-    
     private func initIOSensors() -> [Sensor] {
         guard let (cpu, gpu, ane, ram, pci) = self.IOSensors() else { return [] }
         return [
@@ -565,62 +539,8 @@ extension SensorsReader {
         ]
     }
     
-    private static func appleSiliconPower(currentEnergy: Double, previousEnergy: Double, elapsed: TimeInterval) -> Double {
-        guard elapsed > 0 else { return 0 }
-        return (currentEnergy - previousEnergy) / elapsed
-    }
-
     private func IOSensors() -> (Double, Double, Double, Double, Double)? {
-        guard let reportSample = IOReportCreateSamples(self.subscription, self.channels, nil)?.takeRetainedValue(),
-              let dict = reportSample as? [String: Any],
-              let channelsList = dict["IOReportChannels"] as? NSArray else {
-            return nil
-        }
-        let items = channelsList as CFArray
-        let now = Date()
-        
-        let prevCPU = self.powers.CPU
-        let prevGPU = self.powers.GPU
-        let prevANE = self.powers.ANE
-        let prevRAM = self.powers.RAM
-        let prevPCI = self.powers.PCI
-        
-        for i in 0..<CFArrayGetCount(items) {
-            let dict = CFArrayGetValueAtIndex(items, i)
-            let item = unsafeBitCast(dict, to: CFDictionary.self)
-            
-            guard let group = IOReportChannelGetGroup(item)?.takeUnretainedValue() as? String,
-                  group == "Energy Model",
-                  let channel = IOReportChannelGetChannelName(item)?.takeUnretainedValue() as? String,
-                  let unit = IOReportChannelGetUnitLabel(item)?.takeUnretainedValue() as? String else { continue }
-            
-            let value = Double(IOReportSimpleGetIntegerValue(item, 0))
-            
-            if channel.hasSuffix("CPU Energy") {
-                self.powers.CPU = value.power(unit)
-            } else if channel.hasSuffix("GPU Energy") {
-                self.powers.GPU = value.power(unit)
-            } else if channel.starts(with: "ANE") {
-                self.powers.ANE = value.power(unit)
-            } else if channel.starts(with: "DRAM") {
-                self.powers.RAM = value.power(unit)
-            } else if channel.starts(with: "PCI") && channel.hasSuffix("Energy") {
-                self.powers.PCI = value.power(unit)
-            }
-        }
-        
-        guard let lastIOSensorsRead = self.lastIOSensorsRead else {
-            self.lastIOSensorsRead = now
-            return (0, 0, 0, 0, 0)
-        }
-        let elapsed = now.timeIntervalSince(lastIOSensorsRead)
-        defer { self.lastIOSensorsRead = now }
-        return (
-            Self.appleSiliconPower(currentEnergy: self.powers.CPU, previousEnergy: prevCPU, elapsed: elapsed),
-            Self.appleSiliconPower(currentEnergy: self.powers.GPU, previousEnergy: prevGPU, elapsed: elapsed),
-            Self.appleSiliconPower(currentEnergy: self.powers.ANE, previousEnergy: prevANE, elapsed: elapsed),
-            Self.appleSiliconPower(currentEnergy: self.powers.RAM, previousEnergy: prevRAM, elapsed: elapsed),
-            Self.appleSiliconPower(currentEnergy: self.powers.PCI, previousEnergy: prevPCI, elapsed: elapsed)
-        )
+        guard let power = self.energyReader.read() else { return nil }
+        return (power.cpu, power.gpu, power.ane, power.ram, power.pci)
     }
 }
