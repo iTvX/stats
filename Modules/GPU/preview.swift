@@ -42,21 +42,25 @@ internal class Preview: PreviewWrapper {
     public init(_ module: ModuleType) {
         super.init(type: module)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([self.quickView()]))
         
-        let (historyView, historyChart) = self.historyView()
+        let (historyView, historyChart) = self.historyView("usage")
         self.utilizationLineChart = historyChart
         
-        let (aneHistoryView, aneHistoryChart) = self.historyView()
+        let (aneHistoryView, aneHistoryChart) = self.historyView("ane")
         self.aneLineChart = aneHistoryChart
         
-        let (renderHistoryView, renderHistoryChart) = self.historyView()
+        let (renderHistoryView, renderHistoryChart) = self.historyView("render")
         self.renderLineChart = renderHistoryChart
         
-        let (tilerHistoryView, tilerHistoryChart) = self.historyView()
+        let (tilerHistoryView, tilerHistoryChart) = self.historyView("tiler")
         self.tilerLineChart = tilerHistoryChart
         
-        let (fpsHistoryView, fpsHistoryChart) = self.historyView()
+        let (fpsHistoryView, fpsHistoryChart) = self.historyView("fps")
         fpsHistoryChart.setSuffix(" fps")
         self.fpsLineChart = fpsHistoryChart
         
@@ -181,14 +185,14 @@ internal class Preview: PreviewWrapper {
         return view
     }
     
-    private func historyView() -> (NSView, LineChartView) {
+    private func historyView(_ key: String) -> (NSView, LineChartView) {
         let view: NSStackView = NSStackView()
         view.orientation = .vertical
         view.distribution = .fillEqually
         view.spacing = Constants.Settings.margin*2
         view.heightAnchor.constraint(equalToConstant: 140).isActive = true
         
-        let chart = LineChartView(num: 600)
+        let chart = LineChartView(num: 600, history: self.history(key, num: 600))
         chart.setLegend(x: true, y: true)
         view.addArrangedSubview(chart)
         
@@ -223,9 +227,18 @@ internal class Preview: PreviewWrapper {
         return (view, bar, valueField)
     }
     
-    internal func loadCallback(_ value: GPU_Info) {
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initialized {
+    internal func loadCallback(_ value: GPU_Info, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                if let sample = value.utilization { self.history("usage", num: 600).append(DoubleValue(sample)) }
+                if let sample = value.aneUtilization { self.history("ane", num: 600).append(DoubleValue(sample)) }
+                if let sample = value.renderUtilization { self.history("render", num: 600).append(DoubleValue(sample)) }
+                if let sample = value.tilerUtilization { self.history("tiler", num: 600).append(DoubleValue(sample)) }
+                if let sample = value.fps { self.history("fps", num: 600).append(DoubleValue(sample/100)) }
+            }
+            if self.deferUpdate(key: "loadCallback", priority: 0, action: { [weak self] in self?.loadCallback(value, recordHistory: false) }) { return }
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initialized {
                 if let value = value.utilization {
                     self.utilizationField?.stringValue = "\(Int(value.rounded(toPlaces: 2) * 100))%"
                     self.utilizationBar?.setValue(ColorValue(value))
@@ -247,21 +260,22 @@ internal class Preview: PreviewWrapper {
                 }
                 self.initialized = true
             }
-            if let value = value.utilization {
-                self.utilizationLineChart?.addValue(value)
+            if value.utilization != nil {
+                self.utilizationLineChart?.refresh()
             }
-            if let value = value.aneUtilization {
-                self.aneLineChart?.addValue(value)
+            if value.aneUtilization != nil {
+                self.aneLineChart?.refresh()
             }
-            if let value = value.renderUtilization {
-                self.renderLineChart?.addValue(value)
+            if value.renderUtilization != nil {
+                self.renderLineChart?.refresh()
             }
-            if let value = value.tilerUtilization {
-                self.tilerLineChart?.addValue(value)
+            if value.tilerUtilization != nil {
+                self.tilerLineChart?.refresh()
             }
-            if let value = value.fps {
-                self.fpsLineChart?.addValue(value/100)
+            if value.fps != nil {
+                self.fpsLineChart?.refresh()
             }
+
         })
     }
 }

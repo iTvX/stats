@@ -240,6 +240,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func appear() {
+        super.appear()
         self.replay(self.sensorsCache, render: self.renderSensors)
         self.list.values.compactMap { $0 as? SensorView }.forEach { $0.refreshChart() }
     }
@@ -255,7 +256,8 @@ internal class Popup: PopupWrapper {
     // MARK: - Settings
     
     public override func settings() -> NSView? {
-        self.settingsView
+        self.prepareContent()
+        return self.settingsView
     }
     
     @objc private func toggleFanValue(_ sender: NSMenuItem) {

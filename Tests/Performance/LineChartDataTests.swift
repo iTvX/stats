@@ -50,4 +50,23 @@ final class LineChartDataTests: XCTestCase {
         data.append(sample(2000, at: 2000))
         XCTAssertEqual(data.snapshot().last??.value, 2000)
     }
+
+    func testConnectivityHistoryKeepsExactSamplesAndTimestamps() {
+        let data = StatusChartData(num: 3)
+        for time in [0.0, 1, 60, 61] { data.append(time != 60, at: Date(timeIntervalSince1970: time)) }
+        XCTAssertEqual(data.snapshot().compactMap { $0?.value }, [1, 0, 1])
+        XCTAssertEqual(data.snapshot().compactMap { $0?.ts }, [1, 60, 61].map { Date(timeIntervalSince1970: $0) })
+        XCTAssertEqual(data.snapshot(count: 5).count, 5)
+        XCTAssertEqual(data.snapshot(count: 2).compactMap { $0?.value }, [0, 1])
+    }
+
+    func testConnectivityConcurrentAccessAndZeroCapacity() {
+        let data = StatusChartData(num: 0)
+        DispatchQueue.concurrentPerform(iterations: 100) { index in
+            data.append(index.isMultiple(of: 2))
+            XCTAssertEqual(data.snapshot().count, 1)
+        }
+        data.append(false)
+        XCTAssertEqual(data.snapshot().last??.value, 0)
+    }
 }

@@ -31,7 +31,7 @@ You can use a combination of any of the variables.
 </ul>
 """
 
-internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
+internal class Settings: DeferredStackView, Settings_v, NSTextFieldDelegate {
     private let title: String
     
     private var removableState: Bool = false
@@ -82,6 +82,8 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
+        defer { self.prepareContent() }
         self.subviews.forEach{ $0.removeFromSuperview() }
         
         self.addArrangedSubview(PreferencesSection([
@@ -155,18 +157,19 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     }
     
     internal func setList(_ list: Disks) {
-        DispatchQueue.main.async(execute: {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "setList", priority: 0, action: { [weak self] in self?.setList(list) }) { return }
             let disks = list.map{ $0.mediaName }
-            if self.button?.itemTitles.count != disks.count {
-                self.button?.removeAllItems()
-            }
             if disks != self.button?.itemTitles {
+                self.button?.removeAllItems()
                 self.button?.addItems(withTitles: disks)
                 self.list = disks
                 if self.selectedDisk != "" {
                     self.button?.selectItem(withTitle: self.selectedDisk)
                 }
             }
+
         })
     }
     

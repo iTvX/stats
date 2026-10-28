@@ -26,7 +26,10 @@ public final class PopupCache<T> {
     }
     
     public func replay(render: (T) -> Void) {
-        if let v = self.value { render(v) }
+        if let v = self.value {
+            render(v)
+            self.initialized = true
+        }
     }
 }
 
@@ -41,7 +44,7 @@ public protocol Popup_p: NSView {
     func setKeyboardShortcut(_ binding: [UInt16])
 }
 
-open class PopupWrapper: NSStackView, Popup_p {
+open class PopupWrapper: DeferredStackView, Popup_p {
     public var title: String
     public var keyboardShortcut: [UInt16] = []
     open var sizeCallback: ((NSSize) -> Void)? = nil
@@ -58,7 +61,7 @@ open class PopupWrapper: NSStackView, Popup_p {
     }
     
     open func settings() -> NSView? { return nil }
-    open func appear() {}
+    open func appear() { self.prepareContent() }
     open func disappear() {}
     
     open func setKeyboardShortcut(_ binding: [UInt16]) {
@@ -67,7 +70,8 @@ open class PopupWrapper: NSStackView, Popup_p {
     }
     
     public func apply<T>(_ value: T, to cache: PopupCache<T>, render: @escaping (T) -> Void) {
-        DispatchQueue.main.async {
+        performOnMain {
+            guard self.isContentPrepared else { cache.value = value; return }
             cache.apply(value, visible: self.window?.isVisible ?? false, render: render)
         }
     }
@@ -83,6 +87,7 @@ public class PopupWindow: NSWindow, NSWindowDelegate {
     internal var openedBy: widget_t? = nil
     
     public init(title: String, module: ModuleType, view: Popup_p?, visibilityCallback: @escaping (_ state: Bool) -> Void) {
+        (view as? DeferredStackView)?.prepareContent()
         self.viewController = PopupViewController(module: module)
         self.viewController.setup(title: title, view: view)
         

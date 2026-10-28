@@ -12,7 +12,7 @@
 import Cocoa
 import Kit
 
-internal class Settings: NSStackView, Settings_v {
+internal class Settings: DeferredStackView, Settings_v {
     private var usagePerCoreState: Bool = false
     private var hyperthreadState: Bool = false
     private var splitValueState: Bool = false
@@ -61,6 +61,7 @@ internal class Settings: NSStackView, Settings_v {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
         self.subviews.forEach{ $0.removeFromSuperview() }
         
         self.addArrangedSubview(PreferencesSection([

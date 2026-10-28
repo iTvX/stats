@@ -53,6 +53,10 @@ internal class Preview: PreviewWrapper {
     public init(_ module: ModuleType) {
         super.init(type: module)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.loadColors()
         
         let splitView = NSStackView()
@@ -171,7 +175,7 @@ internal class Preview: PreviewWrapper {
         view.spacing = Constants.Settings.margin*2
         view.heightAnchor.constraint(equalToConstant: 140).isActive = true
         
-        let chart = LineChartView(num: 600)
+        let chart = LineChartView(num: 600, history: self.history("usage", num: 600))
         chart.setColor(self.chartColor)
         chart.setLegend(x: true, y: true)
         self.loadLineChart = chart
@@ -203,7 +207,7 @@ internal class Preview: PreviewWrapper {
         circle.toolTip = localizedString("Memory pressure")
         self.pressureCircle = circle
         
-        let chart = LineChartView(num: 600, fixedScale: 3)
+        let chart = LineChartView(num: 600, fixedScale: 3, history: self.history("pressure", num: 600))
         chart.setColor(self.chartColor)
         chart.setLegend(x: true, y: false)
         chart.setToolTipFunc { v in
@@ -238,7 +242,7 @@ internal class Preview: PreviewWrapper {
         circle.toolTip = localizedString("Swap")
         self.swapCircle = circle
         
-        let chart = LineChartView(num: 600)
+        let chart = LineChartView(num: 600, history: self.history("swap", num: 600))
         chart.setColor(self.chartColor)
         chart.setLegend(x: true, y: false)
         chart.setToolTipFunc { v in
@@ -269,6 +273,7 @@ internal class Preview: PreviewWrapper {
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         self.processes?.setLock(false)
         self.processes?.setNumberOfProcesses(self.numberOfProcesses)
         self.processesSection?.isHidden = self.numberOfProcesses == 0
@@ -276,11 +281,14 @@ internal class Preview: PreviewWrapper {
     }
     
     public func processCallback(_ list: [TopProcess]?) {
-        guard let list else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard list != nil else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            guard let list else { return }
+
+            guard self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
         
-        DispatchQueue.main.async(execute: {
-            guard (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
-            
             let total = Double(ProcessInfo.processInfo.physicalMemory)
             for i in 0..<view.count {
                 if list.indices.contains(i) {
@@ -292,46 +300,55 @@ internal class Preview: PreviewWrapper {
                 }
             }
             self.initializedProcesses = true
+
         })
     }
     
-    public func loadCallback(_ value: RAM_Usage) {
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initialized {
+    public func loadCallback(_ value: RAM_Usage, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                self.history("usage", num: 600).append(DoubleValue(value.usage))
+                self.history("pressure", num: 600).append(DoubleValue(Double(value.pressure.value.number())/2))
+                self.history("swap", num: 600).append(DoubleValue(value.swap.used))
+            }
+            if self.deferUpdate(key: "loadCallback", priority: 0, action: { [weak self] in self?.loadCallback(value, recordHistory: false) }) { return }
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initialized {
                 self.appField?.stringValue = Units(bytes: Int64(value.app)).getReadableMemory(style: .memory)
                 self.wiredField?.stringValue = Units(bytes: Int64(value.wired)).getReadableMemory(style: .memory)
                 self.compressedField?.stringValue = Units(bytes: Int64(value.compressed)).getReadableMemory(style: .memory)
                 self.freeField?.stringValue = Units(bytes: Int64(value.free)).getReadableMemory(style: .memory)
                 self.swapField?.stringValue = Units(bytes: Int64(value.swap.used)).getReadableMemory(style: .memory)
-                
+
                 let usedStr = Units(bytes: Int64(value.used)).getReadableMemory(style: .memory)
                 self.usedField?.stringValue = "\(localizedString("Used")): \(usedStr)"
-                
+
                 let values = [
                     ColorValue(value.app/value.total, color: self.appColor),
                     ColorValue(value.wired/value.total, color: self.wiredColor),
                     ColorValue(value.compressed/value.total, color: self.compressedColor)
                 ]
-                
+
                 self.usageCircle?.toolTip = "\(localizedString("Memory usage")): \(Int(value.usage*100))%"
                 self.usageCircle?.setValue(value.usage)
                 self.usageCircle?.setSegments(values)
                 self.usageCircle?.setNonActiveSegmentColor(self.freeColor)
-                
+
                 self.bar?.setValues(values)
-                
+
                 self.pressureCircle?.setActiveSegment(value.pressure.value.number())
                 self.pressureCircle?.setTitle(localizedString(value.pressure.value.rawValue.capitalized))
                 self.pressureCircle?.toolTip = "\(localizedString("Memory pressure")): \(value.pressure.value.rawValue)"
-                
+
                 self.swapCircle?.setValue(value.swap.total > 0 ? (value.swap.used*100)/value.swap.total : 0)
                 self.swapCircle?.setText(Units(bytes: Int64(value.swap.used)).getReadableMemory(style: .memory))
-                
+
                 self.initialized = true
             }
-            self.loadLineChart?.addValue(value.usage)
-            self.pressureLineChart?.addValue(Double(value.pressure.value.number())/2)
-            self.swapLineChart?.addValue(value.swap.used)
+            self.loadLineChart?.refresh()
+            self.pressureLineChart?.refresh()
+            self.swapLineChart?.refresh()
+
         })
     }
 }

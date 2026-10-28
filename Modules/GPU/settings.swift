@@ -32,7 +32,7 @@ You can use a combination of any of the variables.
 </ul>
 """
 
-internal class Settings: NSStackView, Settings_v {
+internal class Settings: DeferredStackView, Settings_v {
     private var updateIntervalValue: Int = 1
     private var selectedGPU: String
     private var showTypeValue: Bool = false
@@ -64,6 +64,8 @@ internal class Settings: NSStackView, Settings_v {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
+        defer { self.prepareContent() }
         self.subviews.forEach{ $0.removeFromSuperview() }
         
         self.addArrangedSubview(PreferencesSection([
@@ -96,17 +98,19 @@ internal class Settings: NSStackView, Settings_v {
     }
     
     internal func setList(_ gpus: GPUs) {
-        var list: [KeyValue_t] = [
-            KeyValue_t(key: "automatic", value: "Automatic"),
-            KeyValue_t(key: "separator", value: "separator")
-        ]
-        gpus.active().forEach{ list.append(KeyValue_t(key: $0.model, value: $0.model)) }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "setList", priority: 0, action: { [weak self] in self?.setList(gpus) }) { return }
+            var list: [KeyValue_t] = [
+                KeyValue_t(key: "automatic", value: "Automatic"),
+                KeyValue_t(key: "separator", value: "separator")
+            ]
+            gpus.active().forEach{ list.append(KeyValue_t(key: $0.model, value: $0.model)) }
         
-        DispatchQueue.main.async(execute: {
             guard let button = self.button else { return }
-            if button.menu?.items.count != list.count {
+            if button.menu?.items.compactMap({ $0.representedObject as? String }) != list.filter({ $0.key != "separator" }).map({ $0.key }) {
                 let menu = NSMenu()
-                
+
                 list.forEach { (item) in
                     if item.key.contains("separator") {
                         menu.addItem(NSMenuItem.separator())
@@ -119,10 +123,11 @@ internal class Settings: NSStackView, Settings_v {
                         }
                     }
                 }
-                
+
                 button.menu = menu
                 button.sizeToFit()
             }
+
         })
     }
     

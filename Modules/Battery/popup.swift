@@ -15,8 +15,8 @@ import Kit
 internal class Popup: PopupWrapper {
     private let dashboardHeight: CGFloat = 160
     
-    private var dashboardBatteryView: BatteryView = BatteryView()
-    private var dashboardBatteryStatus: BatteryStatus = BatteryStatus()
+    private lazy var dashboardBatteryView: BatteryView = BatteryView()
+    private lazy var dashboardBatteryStatus: BatteryStatus = BatteryStatus()
     private var levelField: NSTextField? = nil
     
     private var sourceField: NSTextField? = nil
@@ -27,7 +27,7 @@ internal class Popup: PopupWrapper {
     private var voltageField: NSTextField? = nil
     
     private var batterySection: NSView? = nil
-    private var barView: BarChartView = BarChartView(size: 10, horizontal: true)
+    private lazy var barView: BarChartView = BarChartView(size: 10, horizontal: true)
     private var maxCapacityField: NSTextField? = nil
     private var designedCapacityField: NSTextField? = nil
     private var healthField: NSTextField? = nil
@@ -62,6 +62,10 @@ internal class Popup: PopupWrapper {
         self.spacing = 0
         self.orientation = .vertical
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(self.initDashboard())
         self.addArrangedSubview(self.initDetails())
         self.addArrangedSubview(self.initBattery())
@@ -75,6 +79,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func appear() {
+        super.appear()
         self.replay(self.usageCache, render: self.renderUsage)
     }
     
@@ -373,23 +378,26 @@ internal class Popup: PopupWrapper {
     }
     
     public func processCallback(_ list: [TopProcess]) {
-        DispatchQueue.main.async(execute: {
-            if !(self.window?.isVisible ?? false) && self.processesInitialized {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            if !(self.window?.isVisible ?? false) && self.processesInitialized && !self.isReplayingUpdates {
                 return
             }
-            let list = list.map { $0 }
             if list.count != self.processes?.count { self.processes?.clear() }
-            
+
             for i in 0..<list.count {
                 let process = list[i]
                 self.processes?.set(i, process, ["\(process.usage)%"])
             }
-            
+
             self.processesInitialized = true
+
         })
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         if self.processes?.count == self.numberOfProcesses { return }
         
         DispatchQueue.main.async(execute: {
@@ -405,6 +413,7 @@ internal class Popup: PopupWrapper {
     // MARK: - Settings
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([

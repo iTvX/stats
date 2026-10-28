@@ -33,6 +33,10 @@ class Notifications: NotificationsWrapper {
         self.usageState = Store.shared.bool(key: "\(self.module)_notifications_usage_state", defaultValue: self.usageState)
         self.usageLevel = Store.shared.int(key: "\(self.module)_notifications_usage_value", defaultValue: self.usageLevel)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Usage"), component: PreferencesSwitch(
                 action: self.toggleUsage, state: self.usageState,

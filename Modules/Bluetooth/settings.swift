@@ -12,13 +12,13 @@
 import Cocoa
 import Kit
 
-internal class Settings: NSStackView, Settings_v {
+internal class Settings: DeferredStackView, Settings_v {
     public var callback: (() -> Void) = {}
     
     private var list: [String: Bool] = [:]
     
-    private let emptyView: EmptyView = EmptyView(msg: localizedString("No Bluetooth devices are available"))
-    private var section: PreferencesSection = PreferencesSection()
+    private lazy var emptyView: EmptyView = EmptyView(msg: localizedString("No Bluetooth devices are available"))
+    private lazy var section: PreferencesSection = PreferencesSection()
     
     public init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
@@ -27,6 +27,10 @@ internal class Settings: NSStackView, Settings_v {
         self.distribution = .gravityAreas
         self.spacing = Constants.Settings.margin
         
+        self.deferContent { [weak self] in self?.buildContent() }
+    }
+
+    private func buildContent() {
         self.addArrangedSubview(self.emptyView)
         self.addArrangedSubview(self.section)
         self.section.isHidden = true
@@ -38,36 +42,43 @@ internal class Settings: NSStackView, Settings_v {
         fatalError("init(coder:) has not been implemented")
     }
     
-    internal func load(widgets: [widget_t]) {}
+    internal func load(widgets: [widget_t]) {
+        self.prepareContent()
+    }
     
     internal func setList(_ list: [BLEDevice]) {
-        if Set(self.list.keys) != Set(list.map({ $0.id })) && !self.list.isEmpty {
-            self.section.removeFromSuperview()
-            self.section = PreferencesSection()
-            self.addArrangedSubview(self.section)
-            self.list = [:]
-        }
-        
-        if list.isEmpty && self.emptyView.isHidden {
-            self.emptyView.isHidden = false
-            self.section.isHidden = true
-            return
-        } else if !list.isEmpty && !self.emptyView.isHidden {
-            self.emptyView.isHidden = true
-            self.section.isHidden = false
-        }
-        
-        list.forEach { (d: BLEDevice) in
-            if self.list[d.id] == nil {
-                let btn = switchView(
-                    action: #selector(self.handleSelection),
-                    state: d.state
-                )
-                btn.identifier = NSUserInterfaceItemIdentifier(rawValue: "\(d.uuid?.uuidString ?? d.address)")
-                section.add(PreferencesRow(d.name, component: btn))
-                self.list[d.id] = true
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "setList", priority: 0, action: { [weak self] in self?.setList(list) }) { return }
+            if Set(self.list.keys) != Set(list.map({ $0.id })) && !self.list.isEmpty {
+                self.section.removeFromSuperview()
+                self.section = PreferencesSection()
+                self.addArrangedSubview(self.section)
+                self.list = [:]
             }
-        }
+        
+            if list.isEmpty && self.emptyView.isHidden {
+                self.emptyView.isHidden = false
+                self.section.isHidden = true
+                return
+            } else if !list.isEmpty && !self.emptyView.isHidden {
+                self.emptyView.isHidden = true
+                self.section.isHidden = false
+            }
+        
+            list.forEach { (d: BLEDevice) in
+                if self.list[d.id] == nil {
+                    let btn = self.switchView(
+                        action: #selector(self.handleSelection),
+                        state: d.state
+                    )
+                    btn.identifier = NSUserInterfaceItemIdentifier(rawValue: "\(d.uuid?.uuidString ?? d.address)")
+                    self.section.add(PreferencesRow(d.name, component: btn))
+                    self.list[d.id] = true
+                }
+            }
+
+        })
     }
     
     @objc private func handleSelection(_ sender: NSControl) {

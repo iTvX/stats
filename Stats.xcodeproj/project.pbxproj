@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A103AA110000000000000001 /* discoveryHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA110000000000000002 /* discoveryHelpers.swift */; };
+		A103AA100000000000000001 /* discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA100000000000000002 /* discovery.swift */; };
+		A103AA0F0000000000000001 /* models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA0F0000000000000002 /* models.swift */; };
+		A103AA0E0000000000000001 /* InvalidatingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA0E0000000000000002 /* InvalidatingCache.swift */; };
+		A103AA0D0000000000000001 /* DeferredContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA0D0000000000000002 /* DeferredContent.swift */; };
 		A103AA060000000000000001 /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA060000000000000002 /* CommandRunner.swift */; };
 		A103AA070000000000000001 /* commandReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA070000000000000002 /* commandReader.swift */; };
 		A103AA080000000000000001 /* EnergySampling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA080000000000000002 /* EnergySampling.swift */; };
@@ -548,6 +553,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A103AA110000000000000002 /* discoveryHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = discoveryHelpers.swift; sourceTree = "<group>"; };
+		A103AA100000000000000002 /* discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = discovery.swift; sourceTree = "<group>"; };
+		A103AA0F0000000000000002 /* models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = models.swift; sourceTree = "<group>"; };
+		A103AA0E0000000000000002 /* InvalidatingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvalidatingCache.swift; sourceTree = "<group>"; };
+		A103AA0D0000000000000002 /* DeferredContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeferredContent.swift; sourceTree = "<group>"; };
 		A103AA060000000000000002 /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
 		A103AA070000000000000002 /* commandReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = commandReader.swift; sourceTree = "<group>"; };
 		A103AA080000000000000002 /* EnergySampling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergySampling.swift; sourceTree = "<group>"; };
@@ -1323,6 +1333,8 @@
 		9AA81547266A9ACA008C01D0 /* plugins */ = {
 			isa = PBXGroup;
 			children = (
+				A103AA0E0000000000000002 /* InvalidatingCache.swift */,
+				A103AA0D0000000000000002 /* DeferredContent.swift */,
 				A103AA060000000000000002 /* CommandRunner.swift */,
 				A103AA080000000000000002 /* EnergySampling.swift */,
 				A103AA090000000000000002 /* SharedEnergySource.swift */,
@@ -1420,6 +1432,9 @@
 		9AF9EE0324648751005D2270 /* Disk */ = {
 			isa = PBXGroup;
 			children = (
+				A103AA110000000000000002 /* discoveryHelpers.swift */,
+				A103AA100000000000000002 /* discovery.swift */,
+				A103AA0F0000000000000002 /* models.swift */,
 				9AF9EE0E2464875F005D2270 /* main.swift */,
 				9AF9EE1024648ADC005D2270 /* readers.swift */,
 				9A5AF11A2469CE9B00684737 /* popup.swift */,
@@ -2256,6 +2271,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A103AA0E0000000000000001 /* InvalidatingCache.swift in Sources */,
+				A103AA0D0000000000000001 /* DeferredContent.swift in Sources */,
 				A103AA060000000000000001 /* CommandRunner.swift in Sources */,
 				A103AA070000000000000001 /* commandReader.swift in Sources */,
 				A103AA080000000000000001 /* EnergySampling.swift in Sources */,
@@ -2429,6 +2446,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A103AA110000000000000001 /* discoveryHelpers.swift in Sources */,
+				A103AA100000000000000001 /* discovery.swift in Sources */,
+				A103AA0F0000000000000001 /* models.swift in Sources */,
 				5C0A9CA22C467AA300EE6A89 /* widget.swift in Sources */,
 				9A5AF11B2469CE9B00684737 /* popup.swift in Sources */,
 				5C667EF82F992C45005A2D56 /* preview.swift in Sources */,

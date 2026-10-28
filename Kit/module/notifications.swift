@@ -12,7 +12,7 @@
 import Cocoa
 import UserNotifications
 
-open class NotificationsWrapper: NSStackView {
+open class NotificationsWrapper: DeferredStackView {
     public let module: String
     
     private var ids: [String: Bool?] = [:]

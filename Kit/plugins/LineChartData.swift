@@ -55,3 +55,30 @@ public final class LineChartData {
         self.history.replace(with: values)
     }
 }
+
+/// Connectivity samples have one slot per observation rather than inferred
+/// time gaps. Keep their timestamps independently of the grid view as well.
+public final class StatusChartData {
+    private let lock = NSLock()
+    private var points: [DoubleValue?]
+    private var head = 0
+
+    public init(num: Int) { self.points = Array(repeating: nil, count: max(num, 1)) }
+
+    public func append(_ value: Bool, at timestamp: Date = Date()) {
+        var point = DoubleValue(value ? 1 : 0)
+        point.ts = timestamp
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.points[self.head] = point
+        self.head = (self.head + 1) % self.points.count
+    }
+
+    public func snapshot(count: Int? = nil) -> [DoubleValue?] {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let ordered = self.points.indices.map { self.points[(self.head + $0) % self.points.count] }
+        let count = max(count ?? self.points.count, 1)
+        return Array(repeating: nil, count: max(0, count - ordered.count)) + Array(ordered.suffix(count))
+    }
+}

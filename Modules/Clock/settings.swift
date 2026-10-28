@@ -18,7 +18,7 @@ let tzColumnID = NSUserInterfaceItemIdentifier(rawValue: "tz")
 let calendarColumnID = NSUserInterfaceItemIdentifier(rawValue: "calendar")
 let statusColumnID = NSUserInterfaceItemIdentifier(rawValue: "status")
 
-internal class Settings: NSStackView, Settings_v, NSTableViewDelegate, NSTableViewDataSource, NSTextFieldDelegate {
+internal class Settings: DeferredStackView, Settings_v, NSTableViewDelegate, NSTableViewDataSource, NSTextFieldDelegate {
     public var callback: (() -> Void) = {}
     
     private var cachedList: [Clock_t] = []
@@ -40,8 +40,8 @@ internal class Settings: NSStackView, Settings_v, NSTableViewDelegate, NSTableVi
     
     private var title: String
     
-    private let scrollView = NSScrollView()
-    private let tableView = NSTableView()
+    private lazy var scrollView = NSScrollView()
+    private lazy var tableView = NSTableView()
     private var footerView: NSStackView? = nil
     private var deleteButton: NSButton? = nil
     
@@ -68,6 +68,10 @@ internal class Settings: NSStackView, Settings_v, NSTableViewDelegate, NSTableVi
         self.distribution = .gravityAreas
         self.spacing = 0
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.scrollView.documentView = self.tableView
         self.scrollView.hasHorizontalScroller = false
         self.scrollView.hasVerticalScroller = true
@@ -191,6 +195,7 @@ internal class Settings: NSStackView, Settings_v, NSTableViewDelegate, NSTableVi
     }
     
     func load(widgets: [Kit.widget_t]) {
+        self.prepareContent()
         self.tableView.reloadData()
     }
     

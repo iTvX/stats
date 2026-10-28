@@ -53,6 +53,10 @@ class Notifications: NotificationsWrapper {
         self.publicIPState = Store.shared.bool(key: "\(self.module)_notifications_publicIP_state", defaultValue: self.publicIPState)
         self.wifiState = Store.shared.bool(key: "\(self.module)_notifications_wifi_state", defaultValue: self.wifiState)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Status"), component: PreferencesSwitch(
                 action: self.toggleConnectionState, state: self.connectionState, with: StepperInput(

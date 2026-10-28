@@ -46,9 +46,9 @@ internal enum RemoteItem {
 }
 
 internal class Popup: PopupWrapper {
-    private let loginPrompt = EmptyView(height: 60, msg: localizedString("Login to System Stats to see your devices"))
+    private lazy var loginPrompt = EmptyView(height: 60, msg: localizedString("Login to System Stats to see your devices"))
     
-    private var groups: NSStackView = {
+    private lazy var groups: NSStackView = {
         let view = NSStackView()
         view.spacing = Constants.Popup.spacing*2
         view.orientation = .vertical
@@ -66,6 +66,7 @@ internal class Popup: PopupWrapper {
         self.distribution = .fill
         self.spacing = 0
         self.setClippingResistancePriority(.defaultLow, for: .vertical)
+        self.deferContent {}
     }
     
     required init?(coder: NSCoder) {
@@ -81,16 +82,21 @@ internal class Popup: PopupWrapper {
     }
     
     public func authorizationStatus(_ status: Bool) {
-        if !status {
-            self.stopStreams()
-            self.addArrangedSubview(self.loginPrompt)
-            self.groups.removeFromSuperview()
-        } else {
-            self.loginPrompt.removeFromSuperview()
-            self.addArrangedSubview(self.groups)
-            self.syncStreams()
-        }
-        self.recalculateHeight()
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "authorizationStatus", priority: -1, action: { [weak self] in self?.authorizationStatus(status) }) { return }
+            if !status {
+                self.stopStreams()
+                self.addArrangedSubview(self.loginPrompt)
+                self.groups.removeFromSuperview()
+            } else {
+                self.loginPrompt.removeFromSuperview()
+                self.addArrangedSubview(self.groups)
+                self.syncStreams()
+            }
+            self.recalculateHeight()
+
+        })
     }
     
     public override func appear() {
@@ -133,88 +139,93 @@ internal class Popup: PopupWrapper {
     }
     
     internal func callback(_ snapshot: RemoteSnapshot) {
-        let enabledMachines = snapshot.machines.filter { $0.state }
-        let enabledHosts = snapshot.hosts.filter { $0.state }
-        
-        let mi = Dictionary(snapshot.order.machines.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        let hi = Dictionary(snapshot.order.hosts.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        let groupById = Dictionary(snapshot.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        
-        let sortedMachines = enabledMachines.sorted { a, b in
-            let ia = mi[a.id] ?? Int.max
-            let ib = mi[b.id] ?? Int.max
-            if ia != ib { return ia < ib }
-            return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
-        }
-        let sortedHosts = enabledHosts.sorted { a, b in
-            let ia = hi[a.id] ?? Int.max
-            let ib = hi[b.id] ?? Int.max
-            if ia != ib { return ia < ib }
-            return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
-        }
-        
-        var machinesByGroup: [String: [RemoteMachine]] = [:]
-        var ungroupedMachines: [RemoteMachine] = []
-        for m in sortedMachines {
-            if let gid = m.groupID, !gid.isEmpty, groupById[gid] != nil {
-                machinesByGroup[gid, default: []].append(m)
-            } else {
-                ungroupedMachines.append(m)
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "callback", priority: 0, action: { [weak self] in self?.callback(snapshot) }) { return }
+            let enabledMachines = snapshot.machines.filter { $0.state }
+            let enabledHosts = snapshot.hosts.filter { $0.state }
+
+            let mi = Dictionary(snapshot.order.machines.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+            let hi = Dictionary(snapshot.order.hosts.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+            let groupById = Dictionary(snapshot.groups.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+            let sortedMachines = enabledMachines.sorted { a, b in
+                let ia = mi[a.id] ?? Int.max
+                let ib = mi[b.id] ?? Int.max
+                if ia != ib { return ia < ib }
+                return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
             }
-        }
-        var hostsByGroup: [String: [RemoteHost]] = [:]
-        var ungroupedHosts: [RemoteHost] = []
-        for h in sortedHosts {
-            if let gid = h.group, !gid.isEmpty, groupById[gid] != nil {
-                hostsByGroup[gid, default: []].append(h)
-            } else {
-                ungroupedHosts.append(h)
+            let sortedHosts = enabledHosts.sorted { a, b in
+                let ia = hi[a.id] ?? Int.max
+                let ib = hi[b.id] ?? Int.max
+                if ia != ib { return ia < ib }
+                return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
             }
-        }
         
-        // Desired groups, in order: ungrouped first, then groups (in snapshot order).
-        // Each group holds its machines first, then its hosts.
-        var groups: [(id: String, title: String?, machines: [RemoteMachine], hosts: [RemoteHost])] = []
-        if !ungroupedMachines.isEmpty || !ungroupedHosts.isEmpty {
-            groups.append((id: "", title: nil, machines: ungroupedMachines, hosts: ungroupedHosts))
-        }
-        for group in snapshot.groups {
-            let machines = machinesByGroup[group.id] ?? []
-            let hosts = hostsByGroup[group.id] ?? []
-            if !machines.isEmpty || !hosts.isEmpty {
-                groups.append((id: group.id, title: group.name, machines: machines, hosts: hosts))
+            var machinesByGroup: [String: [RemoteMachine]] = [:]
+            var ungroupedMachines: [RemoteMachine] = []
+            for m in sortedMachines {
+                if let gid = m.groupID, !gid.isEmpty, groupById[gid] != nil {
+                    machinesByGroup[gid, default: []].append(m)
+                } else {
+                    ungroupedMachines.append(m)
+                }
             }
-        }
-        
-        let sectorIDs = Set(groups.map { $0.id })
-        
-        // 1. Remove groups that no longer exist
-        self.groups.subviews.compactMap { $0 as? GroupView }.filter { !sectorIDs.contains($0.id) }.forEach { $0.removeFromSuperview() }
-        
-        // 2. Add new / update existing
-        groups.forEach { sector in
-            if let view = self.groups.subviews.compactMap({ $0 as? GroupView }).first(where: { $0.id == sector.id }) {
-                view.update(title: sector.title, machines: sector.machines, hosts: sector.hosts)
-            } else {
-                let view = GroupView(id: sector.id, title: sector.title)
-                view.sizeCallback = { [weak self] in self?.recalculateHeight() }
-                view.update(title: sector.title, machines: sector.machines, hosts: sector.hosts)
-                self.groups.addArrangedSubview(view)
+            var hostsByGroup: [String: [RemoteHost]] = [:]
+            var ungroupedHosts: [RemoteHost] = []
+            for h in sortedHosts {
+                if let gid = h.group, !gid.isEmpty, groupById[gid] != nil {
+                    hostsByGroup[gid, default: []].append(h)
+                } else {
+                    ungroupedHosts.append(h)
+                }
             }
-        }
         
-        // 3. Reorder to match `groups`
-        groups.enumerated().forEach { (index, sector) in
-            if let view = self.groups.arrangedSubviews.compactMap({ $0 as? GroupView }).first(where: { $0.id == sector.id }) {
-                self.groups.removeArrangedSubview(view)
-                self.groups.insertArrangedSubview(view, at: index)
+            // Desired groups, in order: ungrouped first, then groups (in snapshot order).
+            // Each group holds its machines first, then its hosts.
+            var groups: [(id: String, title: String?, machines: [RemoteMachine], hosts: [RemoteHost])] = []
+            if !ungroupedMachines.isEmpty || !ungroupedHosts.isEmpty {
+                groups.append((id: "", title: nil, machines: ungroupedMachines, hosts: ungroupedHosts))
             }
-        }
+            for group in snapshot.groups {
+                let machines = machinesByGroup[group.id] ?? []
+                let hosts = hostsByGroup[group.id] ?? []
+                if !machines.isEmpty || !hosts.isEmpty {
+                    groups.append((id: group.id, title: group.name, machines: machines, hosts: hosts))
+                }
+            }
         
-        self.currentMachineIDs = sortedMachines.map { $0.id }
-        self.syncStreams()
+            let sectorIDs = Set(groups.map { $0.id })
+
+            // 1. Remove groups that no longer exist
+            self.groups.subviews.compactMap { $0 as? GroupView }.filter { !sectorIDs.contains($0.id) }.forEach { $0.removeFromSuperview() }
+
+            // 2. Add new / update existing
+            groups.forEach { sector in
+                if let view = self.groups.subviews.compactMap({ $0 as? GroupView }).first(where: { $0.id == sector.id }) {
+                    view.update(title: sector.title, machines: sector.machines, hosts: sector.hosts)
+                } else {
+                    let view = GroupView(id: sector.id, title: sector.title)
+                    view.sizeCallback = { [weak self] in self?.recalculateHeight() }
+                    view.update(title: sector.title, machines: sector.machines, hosts: sector.hosts)
+                    self.groups.addArrangedSubview(view)
+                }
+            }
         
-        self.recalculateHeight()
+            // 3. Reorder to match `groups`
+            groups.enumerated().forEach { (index, sector) in
+                if let view = self.groups.arrangedSubviews.compactMap({ $0 as? GroupView }).first(where: { $0.id == sector.id }) {
+                    self.groups.removeArrangedSubview(view)
+                    self.groups.insertArrangedSubview(view, at: index)
+                }
+            }
+        
+            self.currentMachineIDs = sortedMachines.map { $0.id }
+            self.syncStreams()
+        
+            self.recalculateHeight()
+
+        })
     }
 }
 

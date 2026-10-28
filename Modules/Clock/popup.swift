@@ -13,7 +13,7 @@ import Cocoa
 import Kit
 
 internal class Popup: PopupWrapper {
-    private let orderTableView: OrderTableView = OrderTableView()
+    private lazy var orderTableView: OrderTableView = OrderTableView()
     private var list: [Clock_t] = []
     private let cache = PopupCache<[Clock_t]>()
     
@@ -29,6 +29,10 @@ internal class Popup: PopupWrapper {
         
         self.calendarState = Store.shared.bool(key: "\(self.title)_calendar", defaultValue: self.calendarState)
         self.weekNumbersState = Store.shared.bool(key: "\(self.title)_calendarWeekNumbers", defaultValue: self.weekNumbersState)
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.calendarView = CalendarView(self.frame.width, showWeekNumbers: self.weekNumbersState)
         
         self.orderTableView.reorderCallback = { [weak self] in
@@ -47,12 +51,17 @@ internal class Popup: PopupWrapper {
     }
     
     internal func callback(_ list: [Clock_t]) {
-        if list.count != self.orderTableView.list.count || self.orderTableView.window?.isVisible ?? false {
-            self.orderTableView.list = list.sorted(by: { $0.popupIndex < $1.popupIndex })
-            self.orderTableView.update()
-        }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "callback", priority: 0, action: { [weak self] in self?.callback(list) }) { return }
+            if self.isReplayingUpdates || list.count != self.orderTableView.list.count || self.orderTableView.window?.isVisible ?? false {
+                self.orderTableView.list = list.sorted(by: { $0.popupIndex < $1.popupIndex })
+                self.orderTableView.update()
+            }
         
-        self.cache.apply(list, visible: self.window?.isVisible ?? false, render: self.render)
+            self.cache.apply(list, visible: self.window?.isVisible ?? false, render: self.render)
+
+        })
     }
     
     private func render(_ list: [Clock_t]) {
@@ -86,6 +95,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([
@@ -112,6 +122,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func appear() {
+        super.appear()
         if self.calendarState {
             self.calendarView?.checkCurrentDay()
         }

@@ -15,7 +15,7 @@ public protocol Settings_v: NSView {
     func load(widgets: [widget_t])
 }
 
-open class PreviewWrapper: NSStackView {
+open class PreviewWrapper: DeferredStackView {
     public let module: ModuleType
     
     public init(type: ModuleType) {
@@ -102,22 +102,16 @@ open class Window: NSStackView {
         self.setHuggingPriority(.required, for: .horizontal)
         self.spacing = Constants.Settings.margin
         
-        let settingsView = self.settings()
-        self.settingsView = settingsView
-        self.addArrangedSubview(settingsView)
-        
         if self.isPreviewAvailable, let previewView = self.preview() {
-            settingsView.isHidden = true
             self.addArrangedSubview(previewView)
             self.previewView = previewView
+        } else {
+            self.ensureSettings()
         }
         
         NotificationCenter.default.addObserver(self, selector: #selector(listenForOneView), name: .toggleOneView, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(listenForToggleView), name: .togglePreview, object: nil)
         
-        self.segmentedControl?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
-        self.widgetSelector?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
-        self.moduleSettings?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
     }
     
     deinit {
@@ -196,6 +190,7 @@ open class Window: NSStackView {
         self.tabView = tabView
         
         let moduleTab: NSTabViewItem = NSTabViewItem()
+        moduleTab.identifier = "module"
         moduleTab.label = localizedString("Module")
         moduleTab.view = {
             let container = NSStackView()
@@ -211,24 +206,24 @@ open class Window: NSStackView {
         tabView.addTabViewItem(moduleTab)
         
         let widgetTab: NSTabViewItem = NSTabViewItem()
+        widgetTab.identifier = "widgets"
         widgetTab.label = localizedString("Widgets")
         widgetTab.view = {
             let view = ScrollableStackView(frame: tabView.frame)
             view.stackView.spacing = 0
             self.widgetSettingsContainer = view.stackView
-            self.loadWidgetSettings()
             return view
         }()
         tabView.addTabViewItem(widgetTab)
         
         if self.isPopupSettingsAvailable {
             let popupTab: NSTabViewItem = NSTabViewItem()
+            popupTab.identifier = "popup"
             popupTab.label = localizedString("Popup")
             popupTab.view = {
                 let view = ScrollableStackView(frame: tabView.frame)
                 view.stackView.spacing = 0
                 self.popupSettingsContainer = view.stackView
-                self.loadPopupSettings()
                 return view
             }()
             tabView.addTabViewItem(popupTab)
@@ -236,12 +231,12 @@ open class Window: NSStackView {
         
         if self.isNotificationsSettingsAvailable {
             let notificationsTab: NSTabViewItem = NSTabViewItem()
+            notificationsTab.identifier = "notifications"
             notificationsTab.label = localizedString("Notifications")
             notificationsTab.view = {
                 let view = ScrollableStackView(frame: tabView.frame)
                 view.stackView.spacing = 0
                 self.notificationsSettingsContainer = view.stackView
-                self.loadNotificationsSettings()
                 return view
             }()
             tabView.addTabViewItem(notificationsTab)
@@ -314,6 +309,7 @@ open class Window: NSStackView {
         self.notificationsSettingsContainer?.subviews.forEach{ $0.removeFromSuperview() }
         
         if let notificationsView = self.notificationsSettings {
+            notificationsView.prepareContent()
             self.notificationsSettingsContainer?.addArrangedSubview(notificationsView)
         } else {
             self.notificationsSettingsContainer?.addArrangedSubview(self.noNotificationsView)
@@ -322,6 +318,13 @@ open class Window: NSStackView {
     
     @objc func switchTabs(sender: NSSegmentedControl) {
         self.tabView?.selectTabViewItem(at: sender.selectedSegment)
+        switch self.tabView?.selectedTabViewItem?.identifier as? String {
+        case "module": self.loadModuleSettings()
+        case "widgets": self.loadWidgetSettings()
+        case "popup": self.loadPopupSettings()
+        case "notifications": self.loadNotificationsSettings()
+        default: break
+        }
     }
     
     @objc private func toggleOneView(_ sender: NSControl) {
@@ -344,12 +347,26 @@ open class Window: NSStackView {
     }
     
     private func toggleView() {
+        if self.settingsView == nil {
+            self.ensureSettings()
+            self.settingsView?.isHidden = true
+        }
         if let preview = self.previewView {
             preview.isHidden = !preview.isHidden
         }
         if let settings = self.settingsView {
             settings.isHidden = !settings.isHidden
         }
+    }
+
+    private func ensureSettings() {
+        guard self.settingsView == nil else { return }
+        let view = self.settings()
+        self.settingsView = view
+        self.addArrangedSubview(view)
+        self.segmentedControl?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
+        self.widgetSelector?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
+        self.moduleSettings?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
     }
 }
 

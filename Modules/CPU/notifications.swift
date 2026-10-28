@@ -93,6 +93,10 @@ class Notifications: NotificationsWrapper {
         self.pCoresLoadState = Store.shared.bool(key: "\(self.module)_notifications_pCoresLoad_state", defaultValue: self.pCoresLoadState)
         self.pCoresLoad = Store.shared.int(key: "\(self.module)_notifications_pCoresLoad_value", defaultValue: self.pCoresLoad)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Total load"), component: PreferencesSwitch(
                 action: self.toggleTotalLoad, state: self.totalLoadState,

@@ -29,6 +29,7 @@ class Notifications: NotificationsWrapper {
                 self.temperatureLevels.append(KeyValue_t(key: p, value: temperature(v)))
             }
         }
+        self.deferContent {}
     }
     
     required init?(coder: NSCoder) {
@@ -41,8 +42,17 @@ class Notifications: NotificationsWrapper {
         if !self.unknownSensorsState {
             values = values.filter({ $0.group != .unknown })
         }
+        self.initIDs(values.map { $0.key })
+        let current = values
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "sensors", action: { [weak self] in self?.renderSettings(current) }) { return }
+            self.renderSettings(current)
+        })
+    }
+
+    private func renderSettings(_ values: [Sensor_p]) {
         self.subviews.forEach({ $0.removeFromSuperview() })
-        self.initIDs(values.map{$0.key})
         
         var types: [SensorType] = []
         values.forEach { (s: Sensor_p) in
