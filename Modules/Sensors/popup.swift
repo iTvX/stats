@@ -41,7 +41,7 @@ internal class Popup: PopupWrapper {
         
         self.settingsView.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Keyboard shortcut"), component: KeyboardShartcutView(
-                callback: self.setKeyboardShortcut,
+                callback: { [weak self] in self?.setKeyboardShortcut($0) },
                 value: self.keyboardShortcut
             ))
         ]))
@@ -77,13 +77,21 @@ internal class Popup: PopupWrapper {
     
     internal func setup(_ values: [Sensor_p]? = nil, reload: Bool = false) {
         guard let values = reload ? self.sensors : values else { return }
+        let previous = self.list
+        var next: [String: NSView] = [:]
         let fans = values.filter({ $0.type == .fan && $0.popupState })
         var sensors = values
         if !self.unknownSensorsState {
             sensors = sensors.filter({ $0.group != .unknown })
         }
         
-        self.subviews.forEach({ $0.removeFromSuperview() })
+        self.arrangedSubviews.forEach {
+            self.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        // Detach reusable rows from old group containers. The new dictionary
+        // below owns only active rows, allowing removed views to be released.
+        previous.values.forEach { $0.removeFromSuperview() }
         if !reload {
             self.settingsView.subviews.filter({ $0.identifier == NSUserInterfaceItemIdentifier("sensor") }).forEach { v in
                 v.removeFromSuperview()
@@ -107,18 +115,28 @@ internal class Popup: PopupWrapper {
             fans.forEach { (f: Sensor_p) in
                 if let fan = f as? Fan {
                     if f.isComputed {
-                        let sensor = SensorView(fan, width: self.frame.width, toggleable: false) {}
-                        self.list[fan.key] = sensor
+                        let sensor = previous[fan.key] as? SensorView ?? SensorView(fan, width: self.frame.width, toggleable: false) {}
+                        sensor.update(fan)
+                        next[fan.key] = sensor
                         container.addArrangedSubview(sensor)
                     } else {
-                        let view = FanView(fan, width: self.frame.width) { [weak self] in
+                        let view: FanView
+                        if let old = previous[fan.key] as? FanView, old.fan.id == fan.id, old.fan.name == fan.name, old.fan.mode == fan.mode,
+                           old.fan.minSpeed == fan.minSpeed, old.fan.maxSpeed == fan.maxSpeed {
+                            view = old
+                        } else {
+                            view = FanView(fan, width: self.frame.width) {}
+                        }
+                        view.sizeCallback = { [weak self, weak container] in
+                            guard let container else { return }
                             let h = container.arrangedSubviews.map({ $0.bounds.height + container.spacing }).reduce(0, +) - container.spacing
                             if container.frame.size.height != h && h >= 0 {
                                 container.setFrameSize(NSSize(width: container.frame.width, height: h))
                             }
                             self?.recalculateHeight()
                         }
-                        self.list[fan.key] = view
+                        view.update(fan)
+                        next[fan.key] = view
                         container.addArrangedSubview(view)
                     }
                 }
@@ -170,11 +188,17 @@ internal class Popup: PopupWrapper {
             self.addArrangedSubview(separatorView(localizedString(typ.rawValue), width: self.frame.width))
             groups.forEach { (group: SensorGroup) in
                 filtered.filter{ $0.group == group }.forEach { (s: Sensor_p) in
-                    let sensor = SensorView(s, width: self.frame.width) { [weak self] in
-                        self?.recalculateHeight()
+                    let sensor: SensorView
+                    if let existing = previous[s.key] as? SensorView, existing.sensorType == s.type {
+                        sensor = existing
+                    } else {
+                        sensor = SensorView(s, width: self.frame.width) { [weak self] in
+                            self?.recalculateHeight()
+                        }
                     }
+                    sensor.update(s)
                     self.addArrangedSubview(sensor)
-                    self.list[s.key] = sensor
+                    next[s.key] = sensor
                 }
             }
         }
@@ -182,11 +206,14 @@ internal class Popup: PopupWrapper {
         if !reload {
             self.sensors = values
         }
+        self.list = next
+        if reload { self.sensorsCache.replay(render: self.renderSensors) }
         self.recalculateHeight()
     }
     
     internal func usageCallback(_ values: [Sensor_p]) {
-        DispatchQueue.main.async(execute: {
+        DispatchQueue.main.async(execute: { [weak self] in
+            guard let self else { return }
             values.filter({ $0 is Sensor }).forEach { (s: Sensor_p) in
                 if let sensor = self.list[s.key] as? SensorView {
                     sensor.addHistoryPoint(s)
@@ -214,6 +241,7 @@ internal class Popup: PopupWrapper {
     
     public override func appear() {
         self.replay(self.sensorsCache, render: self.renderSensors)
+        self.list.values.compactMap { $0 as? SensorView }.forEach { $0.refreshChart() }
     }
     
     private func recalculateHeight() {
@@ -255,11 +283,12 @@ internal class Popup: PopupWrapper {
 
 internal class SensorView: NSStackView {
     public var sizeCallback: (() -> Void)
-    
+    internal let sensorType: SensorType
+    internal let history = LineChartData(num: 120)
+
     private var valueView: ValueSensorView!
-    private var chartView: ChartSensorView!
-    
-    private var openned: Bool = false
+    private(set) var chartView: ChartSensorView?
+    private var currentSuffix: String
     
     private var fanValueState: FanValue {
         FanValue(rawValue: Store.shared.string(key: "Sensors_popup_fanValue", defaultValue: FanValue.percentage.rawValue)) ?? .percentage
@@ -267,6 +296,8 @@ internal class SensorView: NSStackView {
     
     public init(_ sensor: Sensor_p, width: CGFloat, toggleable: Bool = true, callback: @escaping (() -> Void)) {
         self.sizeCallback = callback
+        self.sensorType = sensor.type
+        self.currentSuffix = sensor.unit
         
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 22))
         
@@ -275,9 +306,8 @@ internal class SensorView: NSStackView {
         self.spacing = 0
         
         self.valueView = ValueSensorView(sensor, width: width, toggleable: toggleable, callback: { [weak self] in
-            self?.open()
+            self?.toggleChart()
         })
-        self.chartView = ChartSensorView(width: width, suffix: sensor.unit)
         
         self.addArrangedSubview(self.valueView)
         
@@ -296,20 +326,34 @@ internal class SensorView: NSStackView {
         if let fan = sensor as? Fan {
             value = self.fanValueState == .percentage ? "\(fan.percentage)%" : fan.formattedValue
         }
-        self.valueView.update(value)
+        self.valueView.update(value, name: sensor.name)
+        self.currentSuffix = sensor.unit
+        self.chartView?.setSuffix(sensor.unit)
     }
     
-    public func addHistoryPoint(_ sensor: Sensor_p) {
-        self.chartView.update(sensor.localValue, sensor.unit)
+    public func addHistoryPoint(_ sensor: Sensor_p, at timestamp: Date = Date()) {
+        var value = DoubleValue(sensor.localValue / 100)
+        value.ts = timestamp
+        self.history.append(value)
+        self.currentSuffix = sensor.unit
+        self.refreshChart()
     }
-    
-    private func open() {
-        if self.openned {
-            self.chartView.removeFromSuperview()
+
+    internal func refreshChart() {
+        self.chartView?.setSuffix(self.currentSuffix)
+        self.chartView?.refresh()
+    }
+
+    internal func toggleChart() {
+        if let chart = self.chartView {
+            self.removeArrangedSubview(chart)
+            chart.removeFromSuperview()
+            self.chartView = nil
         } else {
-            self.addArrangedSubview(self.chartView)
+            let chart = ChartSensorView(width: self.frame.width, suffix: self.currentSuffix, history: self.history)
+            self.chartView = chart
+            self.addArrangedSubview(chart)
         }
-        self.openned = !self.openned
         
         let h = self.arrangedSubviews.map({ $0.bounds.height }).reduce(0, +)
         self.setFrameSize(NSSize(width: self.frame.width, height: h))
@@ -366,8 +410,9 @@ internal class ValueSensorView: NSStackView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    public func update(_ value: String) {
-        self.valueView.stringValue = value
+    public func update(_ value: String, name: String? = nil) {
+        if self.valueView.stringValue != value { self.valueView.stringValue = value }
+        if let name, self.labelView.stringValue != name { self.labelView.stringValue = name }
     }
     
     override func mouseDown(with theEvent: NSEvent) {
@@ -388,9 +433,9 @@ internal class ValueSensorView: NSStackView {
 
 internal class ChartSensorView: NSStackView {
     private var chart: LineChartView? = nil
-    private var currentSuffix: String
+    private(set) var currentSuffix: String
     
-    public init(width: CGFloat, suffix: String) {
+    public init(width: CGFloat, suffix: String, history: LineChartData) {
         self.currentSuffix = suffix
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 60))
         
@@ -401,8 +446,10 @@ internal class ChartSensorView: NSStackView {
         self.spacing = 0
         self.layer?.cornerRadius = 3
         
-        self.chart = LineChartView(frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.frame.height), num: 120, scale: .linear)
-        self.chart?.setSuffix(suffix)
+        self.chart = LineChartView(
+            frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.frame.height),
+            num: 120, suffix: suffix, scale: .linear, history: history
+        )
         
         if let view = self.chart {
             self.addArrangedSubview(view)
@@ -422,13 +469,15 @@ internal class ChartSensorView: NSStackView {
         self.chart?.display()
     }
     
-    public func update(_ value: Double, _ suffix: String) {
-        guard let chart = self.chart else { return }
+    public func setSuffix(_ suffix: String) {
         if self.currentSuffix != suffix {
             self.currentSuffix = suffix
-            chart.setSuffix(suffix)
+            self.chart?.setSuffix(suffix)
         }
-        chart.addValue(value/100)
+    }
+
+    public func refresh() {
+        self.chart?.refresh()
     }
 }
 

@@ -36,18 +36,26 @@ def run(products=None):
             count = len(re.findall(r"^    func test\w+\(", test_file.read_text(), re.MULTILINE))
             if not count:
                 raise RuntimeError("No performance tests discovered")
-            setup = "import AppKit\nNSApplication.shared.setActivationPolicy(.prohibited)\n" if app else ""
+            bundle_id = "com.itvx.stats.performance-tests." + suite.lower()
+            setup = (
+                "import AppKit\n"
+                f'let testDomain = "{bundle_id}"\n'
+                "precondition(Bundle.main.bundleIdentifier == testDomain)\n"
+                "UserDefaults.standard.removePersistentDomain(forName: testDomain)\n"
+                "NSApplication.shared.setActivationPolicy(.prohibited)\n"
+            ) if app else ""
+            cleanup = "UserDefaults.standard.removePersistentDomain(forName: testDomain)\n" if app else ""
             (build / "main.swift").write_text(
                 "import XCTest\nimport Darwin\n" + setup +
-                f"let suite = {suite}.defaultTestSuite\nsuite.run()\n"
+                f"let suite = {suite}.defaultTestSuite\nsuite.run()\n" + cleanup +
                 f"exit(suite.testRun?.hasSucceeded == true && suite.testRun?.executionCount == {count} ? 0 : 1)\n")
             executable = build / suite
             if app:
                 bundle = build / "PerformanceTests.app"
                 executable = bundle / "Contents/MacOS/PerformanceTests"
-                executable.parent.mkdir(parents=True)
+                executable.parent.mkdir(parents=True, exist_ok=True)
                 (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps({
-                    "CFBundleIdentifier": "com.itvx.stats.performance-tests",
+                    "CFBundleIdentifier": bundle_id,
                     "CFBundleExecutable": "PerformanceTests", "CFBundlePackageType": "APPL",
                     "LSBackgroundOnly": True,
                 }))
@@ -55,7 +63,12 @@ def run(products=None):
             subprocess.run(command + list(extra) + [str(p) for p in sources] +
                            [str(test_file), str(build / "main.swift"), "-o", str(executable)],
                            check=True, env=env, timeout=180)
-            subprocess.run([str(executable)], check=True, env=env, timeout=45)
+            try:
+                subprocess.run([str(executable)], check=True, env=env, timeout=45)
+            finally:
+                if app:
+                    subprocess.run(["/usr/bin/defaults", "delete", bundle_id],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
         execute(TESTS / "RuntimeTests.swift", "PerformanceTests", [
             ROOT / "Kit/plugins/ReaderWorkQueue.swift", ROOT / "Kit/plugins/Repeater.swift",
@@ -64,6 +77,9 @@ def run(products=None):
         ])
         execute(TESTS / "ChartHistoryTests.swift", "ChartHistoryTests", [
             ROOT / "Kit/plugins/ChartHistoryBuffer.swift",
+        ])
+        execute(TESTS / "LineChartDataTests.swift", "LineChartDataTests", [
+            ROOT / "Kit/plugins/ChartHistoryBuffer.swift", ROOT / "Kit/plugins/LineChartData.swift",
         ])
         execute(TESTS / "IOServiceTests.swift", "IOServiceTests", [
             ROOT / "Kit/plugins/IOServiceProperties.swift",
@@ -79,6 +95,12 @@ def run(products=None):
                     ["-F", str(products), "-framework", "Kit",
                      "-Xcc", "-I" + str(ROOT / "Kit/lldb"),
                      "-Xlinker", "-rpath", "-Xlinker", str(products)], app=True)
+            execute(TESTS / "SensorViewTests.swift", "SensorViewTests", [
+                ROOT / "Modules/Sensors/popup.swift", ROOT / "Modules/Sensors/values.swift",
+                TESTS / "SensorViewSupport.swift",
+            ], ["-F", str(products), "-framework", "Kit",
+                "-Xcc", "-I" + str(ROOT / "Kit/lldb"),
+                "-Xlinker", "-rpath", "-Xlinker", str(products)], app=True)
 
 
 if __name__ == "__main__":

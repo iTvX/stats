@@ -11,15 +11,6 @@
 
 import Cocoa
 
-public struct DoubleValue {
-    public var ts: Date = Date()
-    public let value: Double
-    
-    public init(_ value: Double = 0) {
-        self.value = value
-    }
-}
-
 public struct ColorValue: Equatable {
     public var ts: Date = Date()
     public let value: Double
