@@ -103,7 +103,7 @@ internal class UsageReader: Reader<RAM_Usage> {
     }
 }
 
-public class ProcessReader: Reader<[TopProcess]> {
+public class ProcessReader: CommandReader<[TopProcess]> {
     private let title: String = "RAM"
     
     private var numberOfProcesses: Int {
@@ -123,42 +123,16 @@ public class ProcessReader: Reader<[TopProcess]> {
     }
     
     public override func read() {
-        if self.numberOfProcesses == 0 {
-            return
-        }
-        
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/top")
-        if self.combinedProcesses {
-            task.arguments = ["-l", "1", "-o", "mem", "-stats", "pid,command,mem"]
-        } else {
-            task.arguments = ["-l", "1", "-o", "mem", "-n", "\(self.numberOfProcesses)", "-stats", "pid,command,mem"]
-        }
-        
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        
-        defer {
-            outputPipe.fileHandleForReading.closeFile()
-            errorPipe.fileHandleForReading.closeFile()
-        }
-        
-        task.standardOutput = outputPipe
-        task.standardError = errorPipe
-        
-        do {
-            try task.run()
-        } catch let err {
-            error("top(): \(err.localizedDescription)", log: self.log)
-            return
-        }
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8)
-        _ = String(data: errorData, encoding: .utf8)
-        guard let output, !output.isEmpty else { return }
-        
+        let count = self.numberOfProcesses
+        let combined = self.combinedProcesses
+        guard count > 0 else { return }
+        // Framework totals are not used by the pid/command/mem view. Per-process
+        // physical footprint collection is independent of top's framework scan.
+        var arguments = ["-l", "1", "-F", "-o", "mem", "-stats", "pid,command,mem"]
+        if !combined { arguments += ["-n", "\(count)"] }
+        guard let sample = self.runCommand("/usr/bin/top", arguments: arguments),
+              let output = String(data: sample.stdout, encoding: .utf8), !output.isEmpty else { return }
+
         var processes: [TopProcess] = []
         output.enumerateLines { (line, _) in
             if line.matches("^\\d+\\** +.* +\\d+[A-Z]*\\+?\\-? *$") {
@@ -166,7 +140,8 @@ public class ProcessReader: Reader<[TopProcess]> {
             }
         }
         
-        if !self.combinedProcesses {
+        if !combined {
+            guard self.commandRunner.accepts(sample) else { return }
             self.callback(processes)
             return
         }
@@ -184,12 +159,13 @@ public class ProcessReader: Reader<[TopProcess]> {
         }
         
         var result: [TopProcess] = []
-        for (_, processes) in processGroups {
+        for (groupKey, processes) in processGroups {
             let totalUsage = processes.reduce(0) { $0 + $1.usage }
             let firstProcess = processes.first!
+            let responsiblePid = Int(groupKey) ?? firstProcess.pid
             let name: String
             
-            if let app = NSRunningApplication(processIdentifier: pid_t(ProcessReader.getResponsiblePid(firstProcess.pid))),
+            if let app = NSRunningApplication(processIdentifier: pid_t(responsiblePid)),
                let appName = app.localizedName {
                 name = appName
             } else {
@@ -197,14 +173,15 @@ public class ProcessReader: Reader<[TopProcess]> {
             }
             
             result.append(TopProcess(
-                pid: ProcessReader.getResponsiblePid(firstProcess.pid),
+                pid: responsiblePid,
                 name: name,
                 usage: totalUsage
             ))
         }
         
         result.sort { $0.usage > $1.usage }
-        self.callback(Array(result.prefix(self.numberOfProcesses)))
+        guard self.commandRunner.accepts(sample) else { return }
+        self.callback(Array(result.prefix(count)))
     }
     
     private static let dynGetResponsiblePidFunc: UnsafeMutableRawPointer? = {

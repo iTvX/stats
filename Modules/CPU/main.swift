@@ -173,7 +173,7 @@ public class CPU: Module {
             guard let self else { return }
             self.popupView.numberOfProcessesUpdated()
             self.previewView.numberOfProcessesUpdated()
-            self.processReader?.requestRead()
+            self.processReader?.refreshCommand()
         }
         self.settingsView.setInterval = { [weak self] value in
             self?.loadReader?.setInterval(value)

@@ -18,6 +18,7 @@ public final class NextLog {
     func copy(category: String) -> NextLog { self }
 }
 func debug(_ message: String, log: NextLog) {}
+func error(_ message: String, log: NextLog) {}
 
 final class Store {
     static let shared = Store()

@@ -179,7 +179,7 @@ internal class LoadReader: Reader<CPU_Load> {
     }
 }
 
-public class ProcessReader: Reader<[TopProcess]> {
+public class ProcessReader: CommandReader<[TopProcess]> {
     private let title: String = "CPU"
     
     private var numberOfProcesses: Int {
@@ -193,38 +193,10 @@ public class ProcessReader: Reader<[TopProcess]> {
     }
     
     public override func read() {
-        if self.numberOfProcesses == 0 {
-            return
-        }
-        
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/ps")
-        task.arguments = ["-Aceo pid,pcpu,comm", "-r"]
-        
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        
-        defer {
-            outputPipe.fileHandleForReading.closeFile()
-            errorPipe.fileHandleForReading.closeFile()
-        }
-        
-        task.standardOutput = outputPipe
-        task.standardError = errorPipe
-        
-        do {
-            try task.run()
-        } catch let err {
-            error("error read ps: \(err.localizedDescription)", log: self.log)
-            return
-        }
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8)
-        _ = String(data: errorData, encoding: .utf8)
-        guard let output, !output.isEmpty else { return }
-        
+        let count = self.numberOfProcesses
+        guard count > 0 else { return }
+        guard let sample = self.runCommand("/bin/ps", arguments: ["-Aceo pid,pcpu,comm", "-r"]),
+              let output = String(data: sample.stdout, encoding: .utf8), !output.isEmpty else { return }
         var index = 0
         var processes: [TopProcess] = []
         output.enumerateLines { (line, stop) in
@@ -247,10 +219,11 @@ public class ProcessReader: Reader<[TopProcess]> {
                 processes.append(TopProcess(pid: pid, name: name, usage: usage))
             }
             
-            if index == self.numberOfProcesses { stop = true }
+            if index == count { stop = true }
             index += 1
         }
         
+        guard self.commandRunner.accepts(sample) else { return }
         self.callback(processes)
     }
 }
@@ -541,29 +514,12 @@ public class FrequencyReader: Reader<CPU_Frequency> {
     }
 }
 
-public class LimitReader: Reader<CPU_Limit> {
+public class LimitReader: CommandReader<CPU_Limit> {
     private var limits: CPU_Limit = CPU_Limit()
     
     public override func read() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
-        task.arguments = ["-g", "therm"]
-        
-        let outputPipe = Pipe()
-        defer {
-            outputPipe.fileHandleForReading.closeFile()
-        }
-        task.standardOutput = outputPipe
-        
-        do {
-            try task.run()
-        } catch let err {
-            error("error read pmset: \(err.localizedDescription)", log: self.log)
-            return
-        }
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        guard let str = String(data: outputData, encoding: .utf8) else { return }
+        guard let sample = self.runCommand("/usr/bin/pmset", arguments: ["-g", "therm"]),
+              let str = String(data: sample.stdout, encoding: .utf8) else { return }
         var lines = str.split(separator: "\n")
         guard lines.count > 3 else { return }
         lines.removeFirst(3)
@@ -581,6 +537,7 @@ public class LimitReader: Reader<CPU_Limit> {
             }
         }
         
+        guard self.commandRunner.accepts(sample) else { return }
         self.callback(self.limits)
     }
 }
