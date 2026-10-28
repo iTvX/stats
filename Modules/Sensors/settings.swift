@@ -12,7 +12,7 @@
 import Cocoa
 import Kit
 
-internal class Settings: NSStackView, Settings_v {
+internal class Settings: DeferredStackView, Settings_v {
     private var updateIntervalValue: Int = ReaderDefaults.sensors
     private var hidState: Bool
     private var fanSpeedState: Bool = false
@@ -48,6 +48,10 @@ internal class Settings: NSStackView, Settings_v {
         self.fanValueState = FanValue(rawValue: Store.shared.string(key: "\(self.title)_fanValue", defaultValue: self.fanValueState.rawValue)) ?? .percentage
         self.selectedSensor = Store.shared.string(key: "\(self.title)_sensor", defaultValue: self.selectedSensor)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Update interval"), component: selectView(
                 action: #selector(self.changeUpdateInterval),
@@ -99,6 +103,7 @@ internal class Settings: NSStackView, Settings_v {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
         self.widgets = widgets
         var sensors = self.list
         guard !sensors.isEmpty else {
@@ -159,7 +164,7 @@ internal class Settings: NSStackView, Settings_v {
     public func setList(_ list: [Sensor_p]?) {
         guard let list else { return }
         self.list = self.unknownSensorsState ? list : list.filter({ $0.group != .unknown })
-        self.load(widgets: self.widgets)
+        if self.isContentPrepared { self.load(widgets: self.widgets) }
     }
     
     @objc private func toggleSensor(_ sender: NSControl) {

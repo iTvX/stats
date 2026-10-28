@@ -12,18 +12,18 @@
 import Cocoa
 import Kit
 
-internal class Settings: NSStackView, Settings_v {
+internal class Settings: DeferredStackView, Settings_v {
     private let title: String
     
     public var toggleCallback: (() -> Void) = {}
     
-    private let heroView: HeroView = HeroView()
+    private lazy var heroView: HeroView = HeroView()
     private var settingsView: NSStackView? = nil
     private var tabView: NSTabView?
     private var segmentedControl: NSSegmentedControl?
     
-    private let machinesList: RemoteList = RemoteList()
-    private let hostsList: RemoteList = RemoteList()
+    private lazy var machinesList: RemoteList = RemoteList()
+    private lazy var hostsList: RemoteList = RemoteList()
     
     private var machines: [RemoteMachine]?
     private var hosts: [RemoteHost]?
@@ -38,6 +38,10 @@ internal class Settings: NSStackView, Settings_v {
         self.orientation = .vertical
         self.spacing = Constants.Settings.margin
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.machinesList.toggleCallback = { [weak self] in self?.toggleCallback() }
         self.hostsList.toggleCallback = { [weak self] in self?.toggleCallback() }
         
@@ -78,6 +82,7 @@ internal class Settings: NSStackView, Settings_v {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
         if SystemStats.shared.isAuthorized {
             self.load()
         }

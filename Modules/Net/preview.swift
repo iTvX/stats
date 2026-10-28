@@ -13,6 +13,7 @@ import Cocoa
 import Kit
 
 internal class Preview: PreviewWrapper {
+    private let connectionHistory = StatusChartData(num: 300)
     private var chart: NetworkChartView? = nil
     private var grid: GridChartView? = nil
     
@@ -86,6 +87,10 @@ internal class Preview: PreviewWrapper {
     public init(_ module: ModuleType) {
         super.init(type: module)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.loadColors()
         
         self.addArrangedSubview(PreferencesSection([self.usageView()]))
@@ -152,7 +157,7 @@ internal class Preview: PreviewWrapper {
         view.spacing = Constants.Settings.margin*2
         view.heightAnchor.constraint(equalToConstant: 140).isActive = true
         
-        let chart = NetworkChartView(num: 600)
+        let chart = NetworkChartView(num: 600, inHistory: self.history("download", num: 600), outHistory: self.history("upload", num: 600))
         self.chart = chart
         chart.setColors(in: self.downloadColor, out: self.uploadColor)
         chart.setLegend(x: true, y: false)
@@ -168,7 +173,7 @@ internal class Preview: PreviewWrapper {
         view.spacing = Constants.Settings.margin*2
         view.heightAnchor.constraint(equalToConstant: 80).isActive = true
         
-        let grid = GridChartView(grid: (50, 6))
+        let grid = GridChartView(grid: (50, 6), history: self.connectionHistory)
         self.grid = grid
         view.addArrangedSubview(grid)
         
@@ -256,6 +261,7 @@ internal class Preview: PreviewWrapper {
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         self.processes?.setLock(false)
         self.processes?.setNumberOfProcesses(self.numberOfProcesses)
         self.processesSection?.isHidden = self.numberOfProcesses == 0
@@ -263,11 +269,14 @@ internal class Preview: PreviewWrapper {
     }
     
     public func processCallback(_ list: [Network_Process]?) {
-        guard let list else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard list != nil else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            guard let list else { return }
+
+            guard self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
         
-        DispatchQueue.main.async(execute: {
-            guard (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
-            
             for i in 0..<view.count {
                 if list.indices.contains(i) {
                     let process = list[i]
@@ -279,27 +288,34 @@ internal class Preview: PreviewWrapper {
                 }
             }
             self.initializedProcesses = true
+
         })
     }
     
-    public func usageCallback(_ value: Network_Usage) {
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initialized {
+    public func usageCallback(_ value: Network_Usage, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                self.history("download", num: 600).append(DoubleValue(Double(value.bandwidth.download)))
+                self.history("upload", num: 600).append(DoubleValue(Double(value.bandwidth.upload)))
+            }
+            if self.deferUpdate(key: "usageCallback", priority: 0, action: { [weak self] in self?.usageCallback(value, recordHistory: false) }) { return }
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initialized {
                 let upload = Units(bytes: value.bandwidth.upload).getReadableTuple(base: self.base, unit: self.speedUnit)
                 let download = Units(bytes: value.bandwidth.download).getReadableTuple(base: self.base, unit: self.speedUnit)
-                
+
                 self.uploadValueField?.stringValue = "\(upload.0)"
                 self.uploadUnitField?.stringValue = upload.1
-                
+
                 self.downloadValueField?.stringValue = "\(download.0)"
                 self.downloadUnitField?.stringValue = download.1
-                
+
                 self.uploadStateView?.setState(value.bandwidth.upload != 0)
                 self.downloadStateView?.setState(value.bandwidth.download != 0)
-                
+
                 self.totalUploadField?.stringValue = Units(bytes: value.total.upload).getReadableMemory()
                 self.totalDownloadField?.stringValue = Units(bytes: value.total.download).getReadableMemory()
-                
+
                 self.statusField?.setStatus(value.status)
 
                 if let interface = value.interface {
@@ -313,39 +329,39 @@ internal class Preview: PreviewWrapper {
                     self.macAddressField?.stringValue = localizedString("Unknown")
                     self.speedField?.stringValue = localizedString("Unknown")
                 }
-                
+
                 self.connectionTypeField?.stringValue = value.connectionType?.rawValue.capitalized ?? localizedString("Unknown")
-                
+
                 let isWifi = value.connectionType == .wifi
-                
+
                 if isWifi, let ssid = value.wifiDetails.ssid {
                     self.ssidField?.stringValue = ssid
                     self.ssidField?.superview?.isHidden = false
                 } else {
                     self.ssidField?.superview?.isHidden = true
                 }
-                
+
                 if isWifi, let bssid = value.wifiDetails.bssid {
                     self.bssidField?.stringValue = bssid
                     self.bssidField?.superview?.isHidden = false
                 } else {
                     self.bssidField?.superview?.isHidden = true
                 }
-                
+
                 if isWifi, let standard = value.wifiDetails.standard {
                     self.standardField?.stringValue = standard
                     self.standardField?.superview?.isHidden = false
                 } else {
                     self.standardField?.superview?.isHidden = true
                 }
-                
+
                 if isWifi, let security = value.wifiDetails.security {
                     self.securityField?.stringValue = security
                     self.securityField?.superview?.isHidden = false
                 } else {
                     self.securityField?.superview?.isHidden = true
                 }
-                
+
                 if isWifi, let channel = value.wifiDetails.channel {
                     var str = channel
                     var extras: [String] = []
@@ -359,7 +375,7 @@ internal class Preview: PreviewWrapper {
                 } else {
                     self.channelField?.superview?.isHidden = true
                 }
-                
+
                 if isWifi, let rssi = value.wifiDetails.RSSI {
                     var str = "\(rssi) dBm"
                     if let noise = value.wifiDetails.noise {
@@ -370,7 +386,7 @@ internal class Preview: PreviewWrapper {
                 } else {
                     self.signalField?.superview?.isHidden = true
                 }
-                
+
                 var localIP = localizedString("Unknown")
                 if let v4 = value.laddr.v4, !v4.isEmpty {
                     localIP = v4
@@ -378,7 +394,7 @@ internal class Preview: PreviewWrapper {
                     localIP = v6
                 }
                 self.localIPField?.stringValue = localIP
-                
+
                 if let v4 = value.raddr.v4, !v4.isEmpty {
                     var ip = v4
                     if let cc = value.raddr.countryCode, !cc.isEmpty {
@@ -393,7 +409,7 @@ internal class Preview: PreviewWrapper {
                 } else {
                     self.publicIPv4Field?.superview?.isHidden = true
                 }
-                
+
                 if let v6 = value.raddr.v6, !v6.isEmpty {
                     var ip = v6
                     if let cc = value.raddr.countryCode, !cc.isEmpty {
@@ -408,27 +424,33 @@ internal class Preview: PreviewWrapper {
                 } else {
                     self.publicIPv6Field?.superview?.isHidden = true
                 }
-                
+
                 if !value.dns.isEmpty {
                     self.dnsField?.stringValue = value.dns.joined(separator: ", ")
                 } else {
                     self.dnsField?.stringValue = localizedString("Unknown")
                 }
-                
+
                 self.initialized = true
             }
-            
+
             if let chart = self.chart {
                 chart.setBase(self.base)
                 chart.setSpeedUnit(self.speedUnit)
-                chart.addValue(upload: Double(value.bandwidth.upload), download: Double(value.bandwidth.download))
+                chart.refresh()
             }
+
         })
     }
     
-    public func connectivityCallback(_ value: Network_Connectivity?) {
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.connectionInitialized {
+    public func connectivityCallback(_ value: Network_Connectivity?, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                if let value { self.connectionHistory.append(value.status) }
+            }
+            if self.deferUpdate(key: "connectivityCallback", priority: 0, action: { [weak self] in self?.connectivityCallback(value, recordHistory: false) }) { return }
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.connectionInitialized {
                 if let value {
                     self.connectivityField?.setStatus(value.status)
                     self.latencyField?.stringValue = "\(Int(value.latency)) ms"
@@ -436,10 +458,11 @@ internal class Preview: PreviewWrapper {
                 }
                 self.connectionInitialized = true
             }
-            
-            if let value, let chart = self.grid {
-                chart.addValue(value.status)
+
+            if value != nil, let chart = self.grid {
+                chart.refresh()
             }
+
         })
     }
     

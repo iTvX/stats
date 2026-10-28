@@ -27,7 +27,7 @@ internal class Popup: PopupWrapper {
         networkSpeedUnit(from: Store.shared.string(key: "\(self.title)_speedUnit", defaultValue: NetworkSpeedUnitAuto)).key
     }
     
-    private var disks: NSStackView = {
+    private lazy var disks: NSStackView = {
         let view = NSStackView()
         view.spacing = Constants.Popup.margins
         view.orientation = .vertical
@@ -45,7 +45,7 @@ internal class Popup: PopupWrapper {
     private var processes: ProcessesView? = nil
     private var processesView: NSView? = nil
     
-    private let settingsSection = PreferencesSection(title: localizedString("Drives"))
+    private lazy var settingsSection = PreferencesSection(title: localizedString("Drives"))
     private var lastList: [String] = []
     private var smartValues: [String: smart_t] = [:]
     
@@ -61,6 +61,10 @@ internal class Popup: PopupWrapper {
         self.distribution = .fill
         self.spacing = 0
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(self.disks)
         self.addArrangedSubview(self.initProcesses())
         
@@ -105,104 +109,135 @@ internal class Popup: PopupWrapper {
     // MARK: - callbacks
     
     public override func appear() {
+        super.appear()
         self.disks.subviews.compactMap { $0 as? DiskView }.forEach { $0.appear() }
     }
     
     internal func capacityCallback(_ value: Disks) {
-        defer {
-            let h = self.disks.subviews.map({ $0.bounds.height + self.disks.spacing }).reduce(0, +) - self.disks.spacing
-            if h > 0 && self.disks.frame.size.height != h {
-                self.disks.setFrameSize(NSSize(width: self.frame.width, height: h))
-                self.recalculateHeight()
-            } else if h < 0 && self.disks.frame.size.height != 0 {
-                self.disks.setFrameSize(NSSize(width: self.frame.width, height: 0))
-                self.recalculateHeight()
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "capacityCallback", priority: 0, action: { [weak self] in self?.capacityCallback(value) }) { return }
+            defer {
+                let h = self.disks.subviews.map({ $0.bounds.height + self.disks.spacing }).reduce(0, +) - self.disks.spacing
+                if h > 0 && self.disks.frame.size.height != h {
+                    self.disks.setFrameSize(NSSize(width: self.frame.width, height: h))
+                    self.recalculateHeight()
+                } else if h < 0 && self.disks.frame.size.height != 0 {
+                    self.disks.setFrameSize(NSSize(width: self.frame.width, height: 0))
+                    self.recalculateHeight()
+                }
+                self.lastList = value.array.compactMap{ $0.uuid }
             }
-            self.lastList = value.array.compactMap{ $0.uuid }
-        }
         
-        if self.settingsSection.contains("empty_view") {
-            self.settingsSection.delete("empty_view")
-        }
-        
-        self.lastList.filter { !value.map { $0.uuid }.contains($0) }.forEach { self.settingsSection.delete($0) }
-        value.forEach { (drive: drive) in
-            if !self.settingsSection.contains(drive.uuid) {
-                let btn = switchView(
-                    action: #selector(self.toggleDisk),
-                    state: drive.popupState
-                )
-                btn.identifier = NSUserInterfaceItemIdentifier(drive.uuid)
-                self.settingsSection.add(PreferencesRow(drive.mediaName, id: drive.uuid, component: btn))
+            if self.settingsSection.contains("empty_view") {
+                self.settingsSection.delete("empty_view")
             }
-        }
         
-        self.disks.subviews.filter{ $0 is DiskView }.map{ $0 as! DiskView }.forEach { (v: DiskView) in
-            if !value.array.filter({ $0.popupState }).map({$0.uuid}).contains(v.uuid) {
-                v.removeFromSuperview()
-            }
-        }
-        value.array.filter({ $0.popupState }).forEach { (drive: drive) in
-            if let view = self.disks.subviews.filter({ $0 is DiskView }).map({ $0 as! DiskView }).first(where: { $0.uuid == drive.uuid }) {
-                view.update(drive)
-            } else {
-                let view = DiskView(
-                    width: Constants.Popup.width,
-                    drive: drive,
-                    resize: self.recalculateHeight
-                )
-                self.disks.addArrangedSubview(view)
-                if let smart = self.smartValues[drive.uuid] {
-                    view.updateSMART(smart)
+            self.lastList.filter { !value.map { $0.uuid }.contains($0) }.forEach { self.settingsSection.delete($0) }
+            value.forEach { (drive: drive) in
+                if !self.settingsSection.contains(drive.uuid) {
+                    let btn = self.switchView(
+                        action: #selector(self.toggleDisk),
+                        state: drive.popupState
+                    )
+                    btn.identifier = NSUserInterfaceItemIdentifier(drive.uuid)
+                    self.settingsSection.add(PreferencesRow(drive.mediaName, id: drive.uuid, component: btn))
                 }
             }
-        }
+        
+            self.disks.subviews.filter{ $0 is DiskView }.map{ $0 as! DiskView }.forEach { (v: DiskView) in
+                if !value.array.filter({ $0.popupState }).map({$0.uuid}).contains(v.uuid) {
+                    v.removeFromSuperview()
+                }
+            }
+            self.disks.subviews.compactMap { $0 as? DiskView }.forEach { view in
+                if let disk = value.first(where: { $0.uuid == view.uuid }), !view.matches(disk) { view.removeFromSuperview() }
+            }
+            value.array.filter({ $0.popupState }).forEach { (drive: drive) in
+                if let view = self.disks.subviews.filter({ $0 is DiskView }).map({ $0 as! DiskView }).first(where: { $0.uuid == drive.uuid }) {
+                    view.update(drive)
+                } else {
+                    let view = DiskView(
+                        width: Constants.Popup.width,
+                        drive: drive,
+                        readHistory: self.history("read:\(drive.uuid):\(drive.registryID ?? 0)", num: 30),
+                        writeHistory: self.history("write:\(drive.uuid):\(drive.registryID ?? 0)", num: 30),
+                        resize: { [weak self] in self?.recalculateHeight() }
+                    )
+                    self.disks.addArrangedSubview(view)
+                    if let smart = self.smartValues["\(drive.uuid):\(drive.registryID ?? 0)"] {
+                        view.updateSMART(smart)
+                    }
+                }
+            }
+
+        })
     }
     
-    internal func activityCallback(_ value: Disks) {
-        let views = self.disks.subviews.filter{ $0 is DiskView }.map{ $0 as! DiskView }
-        value.reversed().forEach { (drive: drive) in
-            if let view = views.first(where: { $0.uuid == drive.uuid }) {
-                view.updateStats(stats: drive.activity)
+    internal func activityCallback(_ value: Disks, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                let visible = value.array.filter { $0.popupState }
+                self.retainHistories(Set(visible.flatMap { ["read:\($0.uuid):\($0.registryID ?? 0)", "write:\($0.uuid):\($0.registryID ?? 0)"] }))
+                for disk in visible {
+                    self.history("read:\(disk.uuid):\(disk.registryID ?? 0)", num: 30).append(DoubleValue(Double(disk.activity.read)))
+                    self.history("write:\(disk.uuid):\(disk.registryID ?? 0)", num: 30).append(DoubleValue(Double(disk.activity.write)))
+                }
             }
-        }
+            if self.deferUpdate(key: "activityCallback", priority: 2, action: { [weak self] in self?.activityCallback(value, recordHistory: false) }) { return }
+            let views = self.disks.subviews.filter{ $0 is DiskView }.map{ $0 as! DiskView }
+            value.reversed().forEach { (drive: drive) in
+                if let view = views.first(where: { $0.represents(drive) }) {
+                    view.updateStats(stats: drive.activity)
+                }
+            }
+
+        })
     }
     
     internal func smartCallback(_ value: Disks) {
-        value.forEach { (drive: drive) in
-            if let smart = drive.smart {
-                self.smartValues[drive.uuid] = smart
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "smartCallback", priority: 1, action: { [weak self] in self?.smartCallback(value) }) { return }
+            self.smartValues.removeAll(keepingCapacity: true)
+            value.forEach { (drive: drive) in
+                if let smart = drive.smart {
+                    self.smartValues["\(drive.uuid):\(drive.registryID ?? 0)"] = smart
+                }
             }
-        }
         
-        let views = self.disks.subviews.filter{ $0 is DiskView }.map{ $0 as! DiskView }
-        views.forEach { (v: DiskView) in
-            if let smart = self.smartValues[v.uuid] {
-                v.updateSMART(smart)
+            let views = self.disks.subviews.filter{ $0 is DiskView }.map{ $0 as! DiskView }
+            views.forEach { (v: DiskView) in
+                v.updateSMART(self.smartValues[v.identityKey])
             }
-        }
+
+        })
     }
     
     internal func processCallback(_ list: [Disk_process]) {
-        DispatchQueue.main.async(execute: {
-            if !(self.window?.isVisible ?? false) && self.processesInitialized {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            if !(self.window?.isVisible ?? false) && self.processesInitialized && !self.isReplayingUpdates {
                 return
             }
-            let list = list.map{ $0 }
             if list.count != self.processes?.count { self.processes?.clear("-") }
-            
+
             for i in 0..<list.count {
                 let process = list[i]
                 let write = Units(bytes: Int64(process.write)).getReadableSpeed(base: process.base, unit: process.speedUnit)
                 let read = Units(bytes: Int64(process.read)).getReadableSpeed(base: process.base, unit: process.speedUnit)
                 self.processes?.set(i, process, [read, write])
             }
-            
+
             self.processesInitialized = true
+
         })
     }
     
     internal func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         if self.processes?.count == self.numberOfProcesses { return }
         
         DispatchQueue.main.async(execute: {
@@ -218,6 +253,7 @@ internal class Popup: PopupWrapper {
     // MARK: - Settings
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([
@@ -307,6 +343,7 @@ internal class DiskView: NSStackView {
     public var name: String
     public var uuid: String
     private let width: CGFloat
+    private let definition: drive
     private let size: Int64
     
     private var nameView: NameView
@@ -324,15 +361,16 @@ internal class DiskView: NSStackView {
         SColor.fromString(Store.shared.string(key: "\(ModuleType.disk.stringValue)_mainColor", defaultValue: SColor.secondBlue.key)).additional as! NSColor
     }
     
-    init(width: CGFloat, drive d: drive, resize: @escaping () -> Void) {
+    init(width: CGFloat, drive d: drive, readHistory: LineChartData, writeHistory: LineChartData, resize: @escaping () -> Void) {
         self.sizeCallback = resize
         self.uuid = d.uuid
         self.name = d.mediaName
         self.width = width
         self.size = d.size
+        self.definition = d
         let innerWidth: CGFloat = width - (Constants.Popup.margins * 2)
         self.nameView = NameView(width: innerWidth, uuid: d.uuid, name: d.mediaName, path: d.path)
-        self.chartView = ChartView(width: innerWidth)
+        self.chartView = ChartView(width: innerWidth, readHistory: readHistory, writeHistory: writeHistory)
         self.barView = BarChartView(frame: NSRect(x: 0, y: 0, width: innerWidth, height: 8), horizontal: true)
         self.barView.widthAnchor.constraint(equalToConstant: innerWidth).isActive = true
         self.barView.heightAnchor.constraint(equalToConstant: 8).isActive = true
@@ -375,6 +413,18 @@ internal class DiskView: NSStackView {
         self.layer?.backgroundColor = (isDarkMode ? NSColor(red: 17/255, green: 17/255, blue: 17/255, alpha: 0.25) : NSColor(red: 245/255, green: 245/255, blue: 245/255, alpha: 1)).cgColor
     }
     
+    internal func matches(_ value: drive) -> Bool {
+        self.definition.registryID == value.registryID && self.definition.path == value.path &&
+        self.definition.mediaName == value.mediaName && self.definition.size == value.size &&
+        self.definition.fileSystem == value.fileSystem && self.definition.model == value.model
+    }
+
+    var identityKey: String { "\(self.uuid):\(self.definition.registryID ?? 0)" }
+
+    func represents(_ value: drive) -> Bool {
+        self.uuid == value.uuid && self.definition.registryID == value.registryID
+    }
+
     public func update(_ value: drive) {
         self.legendView.update(free: value.free)
         if size != 0 {
@@ -508,7 +558,7 @@ internal class ChartView: NSStackView {
     }
     private var reverseOrder: Bool = Store.shared.bool(key: "\(ModuleType.disk.stringValue)_reverseOrder", defaultValue: false)
     
-    public init(width: CGFloat) {
+    public init(width: CGFloat, readHistory: LineChartData, writeHistory: LineChartData) {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 50))
         
         self.wantsLayer = true
@@ -552,7 +602,7 @@ internal class ChartView: NSStackView {
             y: 1,
             width: self.frame.width - 70 - Constants.Popup.margins,
             height: self.frame.height - 2
-        ), num: 30, minMax: false, reversedOrder: self.reverseOrder, outColor: self.writeColor, inColor: self.readColor)
+        ), num: 30, minMax: false, reversedOrder: self.reverseOrder, outColor: self.writeColor, inColor: self.readColor, inHistory: readHistory, outHistory: writeHistory)
         chart.setTooltipState(false)
         self.chart = chart
         
@@ -568,7 +618,7 @@ internal class ChartView: NSStackView {
     }
     
     public func update(read: Int64, write: Int64) {
-        self.chart?.addValue(upload: Double(write), download: Double(read))
+        self.chart?.refresh()
         self.cache.apply((read, write), visible: self.window?.isVisible ?? false, render: self.renderActivity)
     }
     

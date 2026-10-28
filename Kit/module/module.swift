@@ -80,7 +80,19 @@ open class Module {
     public var enabled: Bool = false
     
     public var menuBar: MenuBar
-    public var window: Window? = nil
+    private var settingsWindow: Window?
+    public var window: Window? {
+        guard self.available else { return nil }
+        if self.settingsWindow == nil {
+            self.settingsWindow = Window(
+                config: self.config, widgets: self.menuBar.widgets,
+                modulePreview: self.previewView, moduleSettings: self.settingsView,
+                popupSettings: self.popupView, notificationsSettings: self.notificationsView
+            )
+            self.settingsWindow?.setState(self.enabled)
+        }
+        return self.settingsWindow
+    }
     public let portal: Portal_p?
     
     public var name: String { config.name }
@@ -159,16 +171,6 @@ open class Module {
             debug("Module started without widget", log: self.log)
         }
         
-        self.window = Window(
-            config: self.config,
-            widgets: self.menuBar.widgets,
-            modulePreview: self.previewView,
-            moduleSettings: self.settingsView,
-            popupSettings: self.popupView,
-            notificationsSettings: self.notificationsView
-        )
-        
-        self.popup = PopupWindow(title: self.config.name, module: self.moduleType, view: self.popupView, visibilityCallback: self.popupVisibilityCallback)
     }
     
     deinit {
@@ -211,7 +213,7 @@ open class Module {
         self.userDefaults?.set(true, forKey: "\(self.config.name)_state")
         self.startReaders()
         self.menuBar.enable()
-        self.window?.setState(self.enabled)
+        self.settingsWindow?.setState(self.enabled)
         debug("Module enabled", log: self.log)
     }
     
@@ -230,7 +232,7 @@ open class Module {
         }
         self.popupVisible = false
         self.menuBar.disable()
-        self.window?.setState(self.enabled)
+        self.settingsWindow?.setState(self.enabled)
         self.popup?.setIsVisible(false)
         debug("Module disabled", log: self.log)
     }
@@ -311,13 +313,18 @@ open class Module {
     }
     
     @objc private func listenForPopupToggle(_ notification: Notification) {
-        guard let popup = self.popup,
-              let name = notification.userInfo?["module"] as? String,
+        guard let name = notification.userInfo?["module"] as? String,
               let buttonOrigin = notification.userInfo?["origin"] as? CGPoint,
               let buttonCenter = notification.userInfo?["center"] as? CGFloat,
               self.config.name == name else {
             return
         }
+        if self.popup == nil {
+            self.popup = PopupWindow(title: self.config.name, module: self.moduleType, view: self.popupView, visibilityCallback: { [weak self] in
+                self?.popupVisibilityCallback($0)
+            })
+        }
+        guard let popup = self.popup else { return }
         
         let openedWindows = NSApplication.shared.windows.filter{ $0 is NSPanel }
         openedWindows.forEach{ $0.setIsVisible(false) }

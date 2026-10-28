@@ -79,6 +79,10 @@ class Notifications: NotificationsWrapper {
         self.swap = Store.shared.int(key: "\(self.module)_notifications_swap_value", defaultValue: self.swap)
         self.swapUnit = SizeUnit.fromString(Store.shared.string(key: "\(self.module)_notifications_swap_unit", defaultValue: self.swapUnit.key))
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Usage"), component: PreferencesSwitch(
                 action: self.toggleTotal, state: self.totalState, with: StepperInput(self.total, callback: self.changeTotal)

@@ -43,6 +43,10 @@ internal class Popup: PopupWrapper {
         self.distribution = .fill
         self.spacing = 0
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(self.initDashboard())
         self.addArrangedSubview(self.initChart())
         self.addArrangedSubview(self.initDetails())
@@ -59,6 +63,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func appear() {
+        super.appear()
         self.replay(self.loadCache, render: self.renderLoad)
     }
     
@@ -110,7 +115,8 @@ internal class Popup: PopupWrapper {
         container.layer?.cornerRadius = Constants.Popup.radius
         
         let chartFrame = NSRect(x: 1, y: 0, width: view.frame.width - 2, height: container.frame.height)
-        self.chart = LineChartView(frame: chartFrame, num: self.lineChartHistory, scale: self.lineChartScale, fixedScale: self.lineChartFixedScale)
+        self.chart = LineChartView(frame: chartFrame, num: self.lineChartHistory, scale: self.lineChartScale, fixedScale: self.lineChartFixedScale,
+                history: self.history("usage", num: self.lineChartHistory))
         container.addSubview(self.chart!)
         
         view.addSubview(separator)
@@ -145,7 +151,8 @@ internal class Popup: PopupWrapper {
     public func loadCallback(_ value: GPU_Info) {
         self.apply(value, to: self.loadCache, render: self.renderLoad)
         if let utilization = value.utilization {
-            self.chart?.addValue(utilization)
+            self.history("usage", num: self.lineChartHistory).append(DoubleValue(utilization))
+            self.chart?.refresh()
         }
     }
     
@@ -187,6 +194,7 @@ internal class Popup: PopupWrapper {
     // MARK: - Settings
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([

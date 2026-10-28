@@ -42,7 +42,7 @@ You can use a combination of any of the variables.
 </ul>
 """
 
-internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
+internal class Settings: DeferredStackView, Settings_v, NSTextFieldDelegate {
     private var updateIntervalValue: Int = 1
     private var updateTopIntervalValue: Int = 1
     private var numberOfProcesses: Int = 8
@@ -82,6 +82,7 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
         self.subviews.forEach{ $0.removeFromSuperview() }
         
         self.addArrangedSubview(PreferencesSection([

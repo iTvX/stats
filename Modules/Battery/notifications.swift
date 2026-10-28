@@ -35,6 +35,10 @@ class Notifications: NotificationsWrapper {
         self.lowLevel = Store.shared.string(key: "\(self.module)_notifications_low", defaultValue: self.lowLevel)
         self.highLevel = Store.shared.string(key: "\(self.module)_notifications_high", defaultValue: self.highLevel)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Low level notification"), component: selectView(
                 action: #selector(self.changeLowLevel),

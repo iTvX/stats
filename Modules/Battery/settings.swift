@@ -57,7 +57,7 @@ Power, current, and voltage readings depend on hardware support and may show zer
 Time estimates show Calculating or Unknown when not available.
 """
 
-internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
+internal class Settings: DeferredStackView, Settings_v, NSTextFieldDelegate {
     public var callback: (() -> Void) = {}
     public var callbackWhenUpdateNumberOfProcesses: (() -> Void) = {}
     
@@ -85,6 +85,7 @@ internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     }
     
     public func load(widgets: [widget_t]) {
+        self.prepareContent()
         self.subviews.forEach{ $0.removeFromSuperview() }
         
         self.addArrangedSubview(PreferencesSection([

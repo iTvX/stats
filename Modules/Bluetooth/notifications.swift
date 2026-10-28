@@ -15,12 +15,16 @@ import Kit
 class Notifications: NotificationsWrapper {
     private var list: [String: Bool] = [:]
     
-    private let emptyView: EmptyView = EmptyView(msg: localizedString("No Bluetooth devices are available"))
-    private var section: PreferencesSection = PreferencesSection()
+    private lazy var emptyView: EmptyView = EmptyView(msg: localizedString("No Bluetooth devices are available"))
+    private lazy var section: PreferencesSection = PreferencesSection()
     
     public init(_ module: ModuleType) {
         super.init(module)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(self.emptyView)
         self.addArrangedSubview(self.section)
         self.section.isHidden = true
@@ -33,6 +37,27 @@ class Notifications: NotificationsWrapper {
     }
     
     internal func callback(_ list: [BLEDevice]) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "devices", action: { [weak self] in self?.renderDevices(list) }) { return }
+            self.renderDevices(list)
+        })
+        let devices = list.filter({ !$0.notificationThreshold.isEmpty })
+        let title = localizedString("Bluetooth threshold")
+
+        for d in devices {
+            if let threshold = Double(d.notificationThreshold) {
+                for l in d.batteryLevel {
+                    let subtitle = localizedString("\(localizedString(d.name)): \(l.value)%")
+                    if let value = Double(l.value) {
+                        self.checkDouble(id: d.id, value: value/100, threshold: threshold, title: title, subtitle: subtitle, less: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func renderDevices(_ list: [BLEDevice]) {
         if Set(self.list.keys) != Set(list.map({ $0.id })) && !self.list.isEmpty {
             self.section.removeFromSuperview()
             self.section = PreferencesSection()
@@ -62,19 +87,6 @@ class Notifications: NotificationsWrapper {
             }
         }
         
-        let devices = list.filter({ !$0.notificationThreshold.isEmpty })
-        let title = localizedString("Bluetooth threshold")
-        
-        for d in devices {
-            if let threshold = Double(d.notificationThreshold) {
-                for l in d.batteryLevel {
-                    let subtitle = localizedString("\(localizedString(d.name)): \(l.value)%")
-                    if let value = Double(l.value) {
-                        self.checkDouble(id: d.id, value: value/100, threshold: threshold, title: title, subtitle: subtitle, less: true)
-                    }
-                }
-            }
-        }
     }
     
     @objc private func changeSensorNotificaion(_ sender: NSMenuItem) {

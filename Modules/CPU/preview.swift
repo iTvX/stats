@@ -78,6 +78,10 @@ internal class Preview: PreviewWrapper {
     public init(_ module: ModuleType) {
         super.init(type: module)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(PreferencesSection([self.totalView()]))
         self.addArrangedSubview(PreferencesSection(title: localizedString("Usage history"), [self.historyView()]))
         self.addArrangedSubview(PreferencesSection(title: localizedString("Load per core"), [self.coresView()]))
@@ -189,7 +193,7 @@ internal class Preview: PreviewWrapper {
         view.spacing = Constants.Settings.margin*2
         view.heightAnchor.constraint(equalToConstant: 140).isActive = true
         
-        let chart = LineChartView(num: 600)
+        let chart = LineChartView(num: 600, history: self.history("usage", num: 600))
         chart.setColor(self.chartColor)
         chart.setLegend(x: true, y: true)
         self.loadLineChart = chart
@@ -302,6 +306,7 @@ internal class Preview: PreviewWrapper {
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         self.processes?.setLock(false)
         self.processes?.setNumberOfProcesses(self.numberOfProcesses)
         self.processesSection?.isHidden = self.numberOfProcesses == 0
@@ -309,11 +314,14 @@ internal class Preview: PreviewWrapper {
     }
     
     public func processCallback(_ list: [TopProcess]?) {
-        guard let list else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard list != nil else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            guard let list else { return }
+
+            guard self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
         
-        DispatchQueue.main.async(execute: {
-            guard (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
-            
             for i in 0..<view.count {
                 if list.indices.contains(i) {
                     let process = list[i]
@@ -323,12 +331,18 @@ internal class Preview: PreviewWrapper {
                 }
             }
             self.initializedProcesses = true
+
         })
     }
     
-    internal func loadCallback(_ value: CPU_Load) {
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initialized {
+    internal func loadCallback(_ value: CPU_Load, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                self.history("usage", num: 600).append(DoubleValue(value.totalUsage))
+            }
+            if self.deferUpdate(key: "loadCallback", priority: 0, action: { [weak self] in self?.loadCallback(value, recordHistory: false) }) { return }
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initialized {
                 self.circle?.toolTip = "\(localizedString("CPU usage")): \(Int(value.totalUsage.rounded(toPlaces: 2) * 100))%"
                 self.circle?.setValue(value.totalUsage)
                 self.circle?.setSegments([
@@ -336,47 +350,55 @@ internal class Preview: PreviewWrapper {
                     ColorValue(value.userLoad, color: self.userColor)
                 ])
                 self.circle?.setNonActiveSegmentColor(self.idleColor)
-                
+
                 self.systemField?.stringValue = "\(Int(value.systemLoad.rounded(toPlaces: 2) * 100))%"
                 self.userField?.stringValue = "\(Int(value.userLoad.rounded(toPlaces: 2) * 100))%"
                 self.idleField?.stringValue = "\(Int(value.idleLoad.rounded(toPlaces: 2) * 100))%"
-                
+
                 self.bar?.setValues([
                     ColorValue(value.systemLoad, color: self.systemColor),
                     ColorValue(value.userLoad, color: self.userColor)
                 ])
-                
+
                 for (i, v) in value.usagePerCore.enumerated() {
                     if let core = self.cores.first(where: {$0.identifier?.rawValue == "\(i)" }) {
                         core.setValue(v)
                     }
                 }
-                
+
                 self.initialized = true
             }
-            self.loadLineChart?.addValue(value.totalUsage)
+            self.loadLineChart?.refresh()
+
         })
     }
     
     public func averageCallback(_ value: CPU_AverageLoad?) {
-        guard let value else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard value != nil else { return }
+            if self.deferUpdate(key: "averageCallback", priority: 0, action: { [weak self] in self?.averageCallback(value) }) { return }
+            guard let value else { return }
         
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initializedFrequency {
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initializedFrequency {
                 self.average1Field?.stringValue = "\(value.load1)"
                 self.average5Field?.stringValue = "\(value.load5)"
                 self.average15Field?.stringValue = "\(value.load15)"
-                
+
                 self.initializedAverage = true
             }
+
         })
     }
     
     public func frequencyCallback(_ value: CPU_Frequency?) {
-        guard let value else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard value != nil else { return }
+            if self.deferUpdate(key: "frequencyCallback", priority: 0, action: { [weak self] in self?.frequencyCallback(value) }) { return }
+            guard let value else { return }
         
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initializedFrequency {
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initializedFrequency {
                 if let v = value.value {
                     self.coresFreqField?.stringValue = "\(Int(v)) MHz"
                 }
@@ -389,9 +411,10 @@ internal class Preview: PreviewWrapper {
                 if let v = value.sCore {
                     self.sCoresFreqField?.stringValue = "\(Int(v)) MHz"
                 }
-                
+
                 self.initializedFrequency = true
             }
+
         })
     }
 }

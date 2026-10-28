@@ -745,7 +745,9 @@ public class NetworkChartView: ChartView {
         inColor: NSColor = .systemBlue,
         scale: Scale = .none,
         fixedScale: Double = 1,
-        animation: Bool = true
+        animation: Bool = true,
+        inHistory: LineChartData? = nil,
+        outHistory: LineChartData? = nil
     ) {
         self.reversedOrder = reversedOrder
         
@@ -754,8 +756,8 @@ public class NetworkChartView: ChartView {
         let bottomFrame = NSRect(x: frame.origin.x, y: 0, width: frame.width, height: safeHeight/2)
         let inFrame = self.reversedOrder ? topFrame : bottomFrame
         let outFrame = self.reversedOrder ? bottomFrame : topFrame
-        self.inChart = LineChartView(frame: inFrame, num: num, color: inColor, scale: scale, fixedScale: fixedScale, zeroValue: 256.0, animation: animation)
-        self.outChart = LineChartView(frame: outFrame, num: num, color: outColor, scale: scale, fixedScale: fixedScale, zeroValue: 256.0, animation: animation)
+        self.inChart = LineChartView(frame: inFrame, num: num, color: inColor, scale: scale, fixedScale: fixedScale, zeroValue: 256.0, animation: animation, history: inHistory)
+        self.outChart = LineChartView(frame: outFrame, num: num, color: outColor, scale: scale, fixedScale: fixedScale, zeroValue: 256.0, animation: animation, history: outHistory)
         
         super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Network")
         
@@ -792,6 +794,11 @@ public class NetworkChartView: ChartView {
     public func addValue(upload: Double, download: Double) {
         self.inChart.addValue(DoubleValue(download))
         self.outChart.addValue(DoubleValue(upload))
+    }
+
+    public func refresh() {
+        self.inChart.refresh()
+        self.outChart.refresh()
     }
     
     public func reinit(_ num: Int = 60) {
@@ -1342,17 +1349,16 @@ public class GridChartView: ChartView {
     private let notOkColor: NSColor = .systemRed
     private let inactiveColor: NSColor = .underPageBackgroundColor.withAlphaComponent(0.4)
     
-    private var values: [ColorValue?] = []
+    private let history: StatusChartData
     private let grid: (rows: Int, columns: Int)
     
     private let dateFormatter = DateFormatter()
     private var cursor: NSPoint? = nil
     
-    public init(frame: NSRect = .zero, grid: (rows: Int, columns: Int)) {
+    public init(frame: NSRect = .zero, grid: (rows: Int, columns: Int), history: StatusChartData? = nil) {
         self.grid = grid
+        self.history = history ?? StatusChartData(num: max(grid.rows * grid.columns, 1))
         super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Grid")
-        let totalCells = max(grid.rows * grid.columns, 1)
-        self.values = Array(repeating: nil, count: totalCells)
         
         self.dateFormatter.dateFormat = "HH:mm:ss"
         
@@ -1372,7 +1378,12 @@ public class GridChartView: ChartView {
         var values: [ColorValue?] = []
         self.read {
             grid = self.grid
-            values = self.values
+            values = self.history.snapshot(count: self.grid.rows * self.grid.columns).map { sample in
+                guard let sample else { return nil }
+                var value = ColorValue(sample.value, color: sample.value == 1 ? self.okColor : self.notOkColor)
+                value.ts = sample.ts
+                return value
+            }
         }
         
         let spacing: CGFloat = 2
@@ -1410,10 +1421,11 @@ public class GridChartView: ChartView {
     }
     
     public func addValue(_ value: Bool) {
-        self.write {
-            self.values.remove(at: 0)
-            self.values.append(ColorValue(value ? 1 : 0, color: value ? self.okColor : self.notOkColor))
-        }
+        self.write { self.history.append(value) }
+        self.displayIfVisible()
+    }
+
+    public func refresh() {
         self.displayIfVisible()
     }
     

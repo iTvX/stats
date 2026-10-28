@@ -13,7 +13,7 @@ import Cocoa
 import Kit
 
 internal class Preview: PreviewWrapper {
-    private var main: disk_s? = nil
+    private var main: disk_s? = SystemKit.shared.device.info.disk?.first
     
     private var circle: PieChartView? = nil
     private var bar: BarChartView? = nil
@@ -26,7 +26,7 @@ internal class Preview: PreviewWrapper {
     private var writeState: NSView? = nil
     
     private var allDisks: PreferencesSection? = nil
-    private var disks: NSGridView = {
+    private lazy var disks: NSGridView = {
         let grid = NSGridView(frame: .zero)
         grid.rowSpacing = Constants.Settings.margin
         grid.rowAlignment = .none
@@ -87,6 +87,10 @@ internal class Preview: PreviewWrapper {
         
         super.init(type: module)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.loadColors()
         
         self.addArrangedSubview(PreferencesSection([self.usageView()]))
@@ -242,7 +246,7 @@ internal class Preview: PreviewWrapper {
         view.spacing = Constants.Settings.margin*2
         view.heightAnchor.constraint(equalToConstant: 140).isActive = true
         
-        let chart = NetworkChartView(frame: .zero, num: 600)
+        let chart = NetworkChartView(frame: .zero, num: 600, inHistory: self.history("read", num: 600), outHistory: self.history("write", num: 600))
         self.chart = chart
         chart.setColors(in: self.readColor, out: self.writeColor)
         chart.setReverseOrder(self.reverseOrderState)
@@ -307,6 +311,7 @@ internal class Preview: PreviewWrapper {
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         self.processes?.setLock(false)
         self.processes?.setNumberOfProcesses(self.numberOfProcesses)
         self.processesSection?.isHidden = self.numberOfProcesses == 0
@@ -314,11 +319,14 @@ internal class Preview: PreviewWrapper {
     }
     
     public func processCallback(_ list: [Disk_process]?) {
-        guard let list else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard list != nil else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            guard let list else { return }
+
+            guard self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
         
-        DispatchQueue.main.async(execute: {
-            guard (self.window?.isVisible ?? false) || !self.initializedProcesses, let view = self.processes else { return }
-            
             for i in 0..<view.count {
                 if list.indices.contains(i) {
                     let process = list[i]
@@ -330,42 +338,45 @@ internal class Preview: PreviewWrapper {
                 }
             }
             self.initializedProcesses = true
+
         })
     }
     
     internal func capacityCallback(_ value: Disks) {
-        DispatchQueue.main.async(execute: {
-            if (self.window?.isVisible ?? false) || !self.initialized {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "capacityCallback", priority: 0, action: { [weak self] in self?.capacityCallback(value) }) { return }
+            if self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initialized {
                 if let main = self.main, let update = value.first(where: { $0.uuid == main.id }) {
                     let free = update.free
                     let used = update.size - free
                     self.usedField?.stringValue = DiskSize(used).getReadableMemory()
                     self.freeField?.stringValue = DiskSize(free).getReadableMemory()
-                    
+
                     self.circle?.setValue(update.percentage)
                     self.bar?.setValue(ColorValue(update.percentage, color: update.percentage.usageColor()))
-                    
+
                     self.uri = update.path
-                    
+
                     self.modelValueField?.stringValue = update.model.isEmpty ? localizedString("Unknown") : update.model
                     self.connectionTypeValueField?.stringValue = update.connectionType.isEmpty ? localizedString("Unknown") : update.connectionType
                     self.bsdNameValueField?.stringValue = update.BSDName.isEmpty ? localizedString("Unknown") : update.BSDName
                     self.encryptedValueField?.stringValue = localizedString(update.encrypted ? "Yes" : "No")
                     self.writableValueField?.stringValue = localizedString(update.writable ? "Yes" : "No")
                 }
-                
+
                 let drives = value.filter(where: { $0.uuid != self.main?.id })
-                
+
                 if drives.isEmpty {
                     self.allDisks?.isHidden = true
                 } else if !drives.isEmpty {
                     self.allDisks?.isHidden = false
                 }
-                
+
                 let mounted = value.count
                 let external = value.filter(where: { $0.removable }).count
                 self.allDisks?.setSubtitle("\(mounted) \(localizedString("mounted")) · \(external) \(localizedString("removable"))")
-                
+
                 let driveUUIDs = Set(drives.map { $0.uuid })
                 for uuid in Array(self.diskRows.keys) where !driveUUIDs.contains(uuid) {
                     if let row = self.diskRows[uuid] {
@@ -399,7 +410,7 @@ internal class Preview: PreviewWrapper {
                     }
                     firstRow.separatorRow = nil
                 }
-                
+
                 drives.forEach { drive in
                     if let row = self.diskRows[drive.uuid] {
                         row.update(drive)
@@ -429,28 +440,31 @@ internal class Preview: PreviewWrapper {
                         self.diskRows[drive.uuid] = row
                     }
                 }
-                
+
                 self.initialized = true
             }
+
         })
     }
     
     internal func smartCallback(_ value: Disks) {
-        DispatchQueue.main.async(execute: {
-            guard (self.window?.isVisible ?? false) || !self.initialized else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "smartCallback", priority: 1, action: { [weak self] in self?.smartCallback(value) }) { return }
+            guard self.isReplayingUpdates || (self.window?.isVisible ?? false) || !self.initialized else { return }
             guard let main = self.main, let smart = value.first(where: { $0.uuid == main.id })?.smart else { return }
-            
+
             self.smartTotalReadValueField?.toolTip = "\(smart.totalRead / (512 * 1000))"
             self.smartTotalWrittenValueField?.toolTip = "\(smart.totalWritten / (512 * 1000))"
             self.smartTotalReadValueField?.stringValue = Units(bytes: smart.totalRead).getReadableMemory()
             self.smartTotalWrittenValueField?.stringValue = Units(bytes: smart.totalWritten).getReadableMemory()
-            
+
             self.temperatureValueField?.stringValue = "\(temperature(Double(smart.temperature)))"
             self.healthValueField?.stringValue = "\(smart.life)%"
-            
+
             self.powerCyclesValueField?.stringValue = "\(smart.powerCycles)"
             self.powerOnHoursValueField?.stringValue = "\(smart.powerOnHours)"
-            
+
             if let warning = smart.criticalWarning {
                 let list = smartCriticalWarnings(warning)
                 self.criticalWarningValueField?.stringValue = list.isEmpty ? localizedString("None") : list.joined(separator: ", ")
@@ -459,7 +473,7 @@ internal class Preview: PreviewWrapper {
                 self.criticalWarningValueField?.stringValue = localizedString("Unavailable")
                 self.criticalWarningValueField?.textColor = .textColor
             }
-            
+
             if let spare = smart.availableSpare {
                 self.availableSpareValueField?.stringValue = "\(spare)%"
                 if let threshold = smart.spareThreshold {
@@ -469,9 +483,9 @@ internal class Preview: PreviewWrapper {
             } else {
                 self.availableSpareValueField?.stringValue = localizedString("Unavailable")
             }
-            
+
             self.unsafeShutdownsValueField?.stringValue = smart.unsafeShutdowns.map { "\($0)" } ?? localizedString("Unavailable")
-            
+
             if let mediaErrors = smart.mediaErrors {
                 self.mediaErrorsValueField?.stringValue = "\(mediaErrors)"
                 self.mediaErrorsValueField?.textColor = mediaErrors > 0 ? .systemRed : .textColor
@@ -479,32 +493,44 @@ internal class Preview: PreviewWrapper {
                 self.mediaErrorsValueField?.stringValue = localizedString("Unavailable")
                 self.mediaErrorsValueField?.textColor = .textColor
             }
+
         })
     }
     
-    internal func activityCallback(_ value: Disks) {
-        guard let main = self.main, let update = value.first(where: { $0.uuid == main.id }) else {
-            return
-        }
-        let read = update.activity.read
-        let write = update.activity.write
+    internal func activityCallback(_ value: Disks, recordHistory: Bool = true) {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if recordHistory {
+                if let main = self.main, let disk = value.first(where: { $0.uuid == main.id }) {
+                    self.history("read", num: 600).append(DoubleValue(Double(disk.activity.read)))
+                    self.history("write", num: 600).append(DoubleValue(Double(disk.activity.write)))
+                }
+            }
+            if self.deferUpdate(key: "activityCallback", priority: 2, action: { [weak self] in self?.activityCallback(value, recordHistory: false) }) { return }
+            guard let main = self.main, let update = value.first(where: { $0.uuid == main.id }) else {
+                return
+            }
+            let read = update.activity.read
+            let write = update.activity.write
         
-        self.chart?.addValue(upload: Double(write), download: Double(read))
+            self.chart?.refresh()
         
-        self.readState?.toolTip = "Read: \(Units(bytes: read).getReadableSpeed(base: self.base, unit: self.speedUnit))"
-        self.readState?.layer?.backgroundColor = read != 0 ? self.readColor.cgColor : NSColor.lightGray.withAlphaComponent(0.75).cgColor
+            self.readState?.toolTip = "Read: \(Units(bytes: read).getReadableSpeed(base: self.base, unit: self.speedUnit))"
+            self.readState?.layer?.backgroundColor = read != 0 ? self.readColor.cgColor : NSColor.lightGray.withAlphaComponent(0.75).cgColor
         
-        self.writeState?.toolTip = "Write: \(Units(bytes: write).getReadableSpeed(base: self.base, unit: self.speedUnit))"
-        self.writeState?.layer?.backgroundColor = write != 0 ? self.writeColor.cgColor : NSColor.lightGray.withAlphaComponent(0.75).cgColor
+            self.writeState?.toolTip = "Write: \(Units(bytes: write).getReadableSpeed(base: self.base, unit: self.speedUnit))"
+            self.writeState?.layer?.backgroundColor = write != 0 ? self.writeColor.cgColor : NSColor.lightGray.withAlphaComponent(0.75).cgColor
         
-        self.readSpeedValueField?.stringValue = Units(bytes: read).getReadableSpeed(base: self.base, unit: self.speedUnit)
-        self.writeSpeedValueField?.stringValue = Units(bytes: write).getReadableSpeed(base: self.base, unit: self.speedUnit)
+            self.readSpeedValueField?.stringValue = Units(bytes: read).getReadableSpeed(base: self.base, unit: self.speedUnit)
+            self.writeSpeedValueField?.stringValue = Units(bytes: write).getReadableSpeed(base: self.base, unit: self.speedUnit)
         
-        let stats = update.activity
-        self.totalReadValueField?.stringValue = Units(bytes: stats.readBytes).getReadableMemory()
-        self.totalReadValueField?.toolTip = "\(stats.readBytes / (512 * 1000))"
-        self.totalWrittenValueField?.stringValue = Units(bytes: stats.writeBytes).getReadableMemory()
-        self.totalWrittenValueField?.toolTip = "\(stats.writeBytes / (512 * 1000))"
+            let stats = update.activity
+            self.totalReadValueField?.stringValue = Units(bytes: stats.readBytes).getReadableMemory()
+            self.totalReadValueField?.toolTip = "\(stats.readBytes / (512 * 1000))"
+            self.totalWrittenValueField?.stringValue = Units(bytes: stats.writeBytes).getReadableMemory()
+            self.totalWrittenValueField?.toolTip = "\(stats.writeBytes / (512 * 1000))"
+
+        })
     }
     
     @objc private func openDisk() {

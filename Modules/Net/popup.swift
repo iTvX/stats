@@ -14,6 +14,7 @@ import Kit
 
 // swiftlint:disable:next type_body_length
 internal class Popup: PopupWrapper {
+    private let connectionHistory = StatusChartData(num: 90)
     private var uploadContainerView: NSView? = nil
     private var uploadView: NSView? = nil
     private var uploadValue: Int64 = 0
@@ -137,6 +138,10 @@ internal class Popup: PopupWrapper {
         self.interfaceDetailsState = Store.shared.bool(key: "\(self.title)_interfaceDetails", defaultValue: self.interfaceDetailsState)
         self.emojiCCState = Store.shared.bool(key: "\(self.title)_emojiCC", defaultValue: self.emojiCCState)
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(self.initDashboard())
         self.addArrangedSubview(self.initChart())
         self.addArrangedSubview(self.initConnectivityChart())
@@ -219,7 +224,8 @@ internal class Popup: PopupWrapper {
             frame: NSRect(x: 0, y: 1, width: container.frame.width, height: container.frame.height - 2),
             num: self.chartHistory, reversedOrder: self.reverseOrderState, outColor: self.uploadColor, inColor: self.downloadColor,
             scale: self.chartScale,
-            fixedScale: Double(self.chartFixedScaleSize.toBytes(self.chartFixedScale))
+            fixedScale: Double(self.chartFixedScaleSize.toBytes(self.chartFixedScale)),
+            inHistory: self.history("download", num: self.chartHistory), outHistory: self.history("upload", num: self.chartHistory)
         )
         chart.setBase(self.base)
         chart.setSpeedUnit(self.speedUnit)
@@ -241,7 +247,7 @@ internal class Popup: PopupWrapper {
         container.layer?.backgroundColor = NSColor.lightGray.withAlphaComponent(0.1).cgColor
         container.layer?.cornerRadius = 3
         
-        let chart = GridChartView(frame: NSRect(x: 0, y: 1, width: container.frame.width, height: container.frame.height - 2), grid: (30, 3))
+        let chart = GridChartView(frame: NSRect(x: 0, y: 1, width: container.frame.width, height: container.frame.height - 2), grid: (30, 3), history: self.connectionHistory)
         container.addSubview(chart)
         self.connectivityChart = chart
         
@@ -395,11 +401,13 @@ internal class Popup: PopupWrapper {
     // MARK: - callbacks
     
     public override func appear() {
+        super.appear()
         self.replay(self.usageCache, render: self.renderUsage)
         self.replay(self.connectivityCache, render: self.renderConnectivity)
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         if self.processes?.count == self.numberOfProcesses { return }
         
         DispatchQueue.main.async(execute: {
@@ -417,12 +425,14 @@ internal class Popup: PopupWrapper {
     }
     
     public func usageCallback(_ value: Network_Usage) {
+        self.history("download", num: self.chartHistory).append(DoubleValue(Double(value.bandwidth.download)))
+        self.history("upload", num: self.chartHistory).append(DoubleValue(Double(value.bandwidth.upload)))
         self.apply(value, to: self.usageCache, render: self.renderUsage)
         
         if let chart = self.chart {
             chart.setBase(self.base)
             chart.setSpeedUnit(self.speedUnit)
-            chart.addValue(upload: Double(value.bandwidth.upload), download: Double(value.bandwidth.download))
+            chart.refresh()
         }
     }
     
@@ -620,21 +630,26 @@ internal class Popup: PopupWrapper {
     }
     
     public func connectivityCallback(_ value: Network_Connectivity?) {
-        if self.latency.count >= 90 {
-            self.latency.remove(at: 0)
-        }
-        self.latency.append(value?.latency ?? 0)
-        
-        if self.jitter.count >= 90 {
-            self.jitter.remove(at: 0)
-        }
-        self.jitter.append(value?.jitter ?? 0)
-        
-        self.apply(value, to: self.connectivityCache, render: self.renderConnectivity)
-        
-        if let value, let chart = self.connectivityChart {
-            chart.addValue(value.status)
-        }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if let value { self.connectionHistory.append(value.status) }
+
+            if self.latency.count >= 90 {
+                self.latency.remove(at: 0)
+            }
+            self.latency.append(value?.latency ?? 0)
+
+            if self.jitter.count >= 90 {
+                self.jitter.remove(at: 0)
+            }
+            self.jitter.append(value?.jitter ?? 0)
+
+            self.apply(value, to: self.connectivityCache, render: self.renderConnectivity)
+
+            if value != nil, let chart = self.connectivityChart {
+                chart.refresh()
+            }
+        })
     }
     
     private func renderConnectivity(_ value: Network_Connectivity?) {
@@ -657,21 +672,23 @@ internal class Popup: PopupWrapper {
     }
     
     public func processCallback(_ list: [Network_Process]) {
-        DispatchQueue.main.async(execute: {
-            if !(self.window?.isVisible ?? false) && self.processesInitialized {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            if !(self.window?.isVisible ?? false) && self.processesInitialized && !self.isReplayingUpdates {
                 return
             }
-            let list = list.map{ $0 }
             if list.count != self.processes?.count { self.processes?.clear() }
-            
+
             for i in 0..<list.count {
                 let process = list[i]
                 let upload = Units(bytes: Int64(process.upload)).getReadableSpeed(base: self.base, unit: self.speedUnit)
                 let download = Units(bytes: Int64(process.download)).getReadableSpeed(base: self.base, unit: self.speedUnit)
                 self.processes?.set(i, process, [download, upload])
             }
-            
+
             self.processesInitialized = true
+
         })
     }
     
@@ -682,6 +699,7 @@ internal class Popup: PopupWrapper {
     // MARK: - Settings
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([

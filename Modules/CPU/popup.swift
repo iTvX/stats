@@ -151,6 +151,10 @@ internal class Popup: PopupWrapper {
         self.lineChartScale = Scale.fromString(Store.shared.string(key: "\(self.title)_lineChartScale", defaultValue: self.lineChartScale.key))
         self.lineChartFixedScale = Double(Store.shared.int(key: "\(self.title)_lineChartFixedScale", defaultValue: 100)) / 100
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         self.addArrangedSubview(self.initDashboard())
         self.addArrangedSubview(self.initChart())
         self.addArrangedSubview(self.initDetails())
@@ -169,6 +173,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func appear() {
+        super.appear()
         self.uptimeField?.stringValue = self.uptimeValue
         self.replay(self.loadCache, render: self.renderLoad)
         self.replay(self.temperatureCache, render: self.renderTemperature)
@@ -244,7 +249,8 @@ internal class Popup: PopupWrapper {
             box.layer?.cornerRadius = Constants.Popup.radius
             
             let chartFrame = NSRect(x: 1, y: 0, width: box.frame.width - 2, height: box.frame.height)
-            self.lineChart = LineChartView(frame: chartFrame, num: self.lineChartHistory, scale: self.lineChartScale, fixedScale: self.lineChartFixedScale)
+            self.lineChart = LineChartView(frame: chartFrame, num: self.lineChartHistory, scale: self.lineChartScale, fixedScale: self.lineChartFixedScale,
+                history: self.history("usage", num: self.lineChartHistory))
             self.lineChart?.setColor(self.chartColor)
             box.addSubview(self.lineChart!)
             
@@ -390,7 +396,8 @@ internal class Popup: PopupWrapper {
     
     public func loadCallback(_ value: CPU_Load) {
         self.apply(value, to: self.loadCache, render: self.renderLoad)
-        self.lineChart?.addValue(value.totalUsage)
+        self.history("usage", num: self.lineChartHistory).append(DoubleValue(value.totalUsage))
+        self.lineChart?.refresh()
     }
     
     private func renderLoad(_ value: CPU_Load) {
@@ -491,25 +498,29 @@ internal class Popup: PopupWrapper {
     }
     
     public func processCallback(_ list: [TopProcess]?) {
-        guard let list else { return }
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            guard list != nil else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            guard let list else { return }
         
-        DispatchQueue.main.async(execute: {
-            if !(self.window?.isVisible ?? false) && self.initializedProcesses {
+            if !(self.window?.isVisible ?? false) && self.initializedProcesses && !self.isReplayingUpdates {
                 return
             }
-            let list = list.map { $0 }
             if list.count != self.processes?.count { self.processes?.clear() }
-            
+
             for i in 0..<list.count {
                 let process = list[i]
                 self.processes?.set(i, process, ["\(process.usage)%"])
             }
-            
+
             self.initializedProcesses = true
+
         })
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         if self.processes?.count == self.numberOfProcesses { return }
         
         DispatchQueue.main.async(execute: {
@@ -546,6 +557,7 @@ internal class Popup: PopupWrapper {
     // MARK: - Settings
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([

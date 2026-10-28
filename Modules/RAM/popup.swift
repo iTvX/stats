@@ -36,7 +36,7 @@ internal class Popup: PopupWrapper {
     private var sliderView: NSView? = nil
     
     private var chart: LineChartView? = nil
-    private var bar: BarChartView = BarChartView(size: 10, horizontal: true)
+    private lazy var bar: BarChartView = BarChartView(size: 10, horizontal: true)
     private var circle: PieChartView? = nil
     private var level: GaugeChartView? = nil
     private var processesInitialized: Bool = false
@@ -86,6 +86,10 @@ internal class Popup: PopupWrapper {
         self.lineChartScale = Scale.fromString(Store.shared.string(key: "\(self.title)_lineChartScale", defaultValue: self.lineChartScale.key))
         self.lineChartFixedScale = Double(Store.shared.int(key: "\(self.title)_lineChartFixedScale", defaultValue: 100)) / 100
         
+        self.deferContent { [weak self] in self?.buildContent(module) }
+    }
+
+    private func buildContent(_ module: ModuleType) {
         let gridView: NSGridView = NSGridView(frame: NSRect(x: 0, y: 0, width: self.frame.width, height: self.frame.height))
         gridView.rowSpacing = 0
         gridView.yPlacement = .fill
@@ -112,6 +116,7 @@ internal class Popup: PopupWrapper {
     }
     
     public override func appear() {
+        super.appear()
         self.replay(self.loadCache, render: self.renderLoad)
     }
     
@@ -120,6 +125,7 @@ internal class Popup: PopupWrapper {
     }
     
     public func numberOfProcessesUpdated() {
+        guard self.isContentPrepared else { return }
         if self.processes?.count == self.numberOfProcesses { return }
         
         DispatchQueue.main.async(execute: {
@@ -191,7 +197,8 @@ internal class Popup: PopupWrapper {
         container.layer?.cornerRadius = Constants.Popup.radius
         
         let chartFrame = NSRect(x: 1, y: 0, width: view.frame.width - 2, height: container.frame.height)
-        self.chart = LineChartView(frame: chartFrame, num: self.lineChartHistory, scale: self.lineChartScale, fixedScale: self.lineChartFixedScale)
+        self.chart = LineChartView(frame: chartFrame, num: self.lineChartHistory, scale: self.lineChartScale, fixedScale: self.lineChartFixedScale,
+                history: self.history("usage", num: self.lineChartHistory))
         self.chart?.setColor(self.chartColor)
         container.addSubview(self.chart!)
         
@@ -242,7 +249,8 @@ internal class Popup: PopupWrapper {
     
     public func loadCallback(_ value: RAM_Usage) {
         self.apply(value, to: self.loadCache, render: self.renderLoad)
-        self.chart?.addValue(value.usage)
+        self.history("usage", num: self.lineChartHistory).append(DoubleValue(value.usage))
+        self.chart?.refresh()
     }
     
     private func renderLoad(_ value: RAM_Usage) {
@@ -278,25 +286,28 @@ internal class Popup: PopupWrapper {
     }
     
     public func processCallback(_ list: [TopProcess]) {
-        DispatchQueue.main.async(execute: {
-            if !(self.window?.isVisible ?? false) && self.processesInitialized {
+        performOnMain(execute: { [weak self] in
+            guard let self else { return }
+            if self.deferUpdate(key: "processCallback", priority: 0, action: { [weak self] in self?.processCallback(list) }) { return }
+            if !(self.window?.isVisible ?? false) && self.processesInitialized && !self.isReplayingUpdates {
                 return
             }
-            let list = list.map { $0 }
             if list.count != self.processes?.count { self.processes?.clear() }
-            
+
             for i in 0..<list.count {
                 let process = list[i]
                 self.processes?.set(i, process, [Units(bytes: Int64(process.usage)).getReadableMemory(style: .memory)])
             }
-            
+
             self.processesInitialized = true
+
         })
     }
     
     // MARK: - Settings
     
     public override func settings() -> NSView? {
+        self.prepareContent()
         let view = SettingsContainerView()
         
         view.addArrangedSubview(PreferencesSection([
