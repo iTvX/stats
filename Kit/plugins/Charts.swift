@@ -238,8 +238,7 @@ public class LineChartView: ChartView {
     
     private let dateFormatter = DateFormatter()
     
-    private var points: [DoubleValue?]
-    private var head: Int = 0
+    private var history: ChartHistoryBuffer<DoubleValue>
     private var shadowPoints: [DoubleValue?] = []
     private var transparent: Bool = true
     private var flipY: Bool = false
@@ -274,7 +273,7 @@ public class LineChartView: ChartView {
         zeroValue: Double = 0.01,
         animation: Bool = true
     ) {
-        self.points = Array(repeating: nil, count: max(num, 2))
+        self.history = ChartHistoryBuffer(capacity: num, timestamp: { $0.ts })
         self.suffix = suffix
         self.color = color
         self.scale = scale
@@ -584,27 +583,10 @@ public class LineChartView: ChartView {
             value = DoubleValue(0)
             value.ts = ts
         }
-        self.write {
-            let n = self.points.count
-            guard n > 0 else { return }
-            
-            if let stats = self.intervalStatsLocked() {
-                let gap = value.ts.timeIntervalSince(stats.lastTs)
-                if gap >= 2.0, gap > stats.typical * 1.5 {
-                    let missing = min(Int((gap / stats.typical).rounded()) - 1, n - 1)
-                    for _ in 0..<max(0, missing) {
-                        self.points[self.head] = nil
-                        self.head = (self.head + 1) % n
-                    }
-                }
-            }
-            
-            self.points[self.head] = value
-            self.head = (self.head + 1) % n
-        }
+        self.write { self.history.append(value) }
         self.onMain { [weak self] in
             guard let self, self.window?.isVisible ?? false else { return }
-            let state = self.read { (n: self.points.count, xLegend: self.xLegend, yLegend: self.yLegend) }
+            let state = self.read { (n: self.history.capacity, xLegend: self.xLegend, yLegend: self.yLegend) }
             let dx = state.n > 1 ? (self.bounds.width - (state.yLegend ? 30 : 0)) / CGFloat(state.n - 1) : 0
             // Legends share the layer with the plot and must remain stationary.
             guard dx >= 1, !state.xLegend, !state.yLegend, !self.stop, self.animationsAllowed else {
@@ -625,37 +607,7 @@ public class LineChartView: ChartView {
     }
     
     private func orderedPointsLocked() -> [DoubleValue?] {
-        let n = self.points.count
-        guard n > 0 else { return [] }
-        var result: [DoubleValue?] = []
-        result.reserveCapacity(n)
-        for i in 0..<n {
-            result.append(self.points[(self.head + i) % n])
-        }
-        return result
-    }
-    
-    private func intervalStatsLocked() -> (lastTs: Date, typical: TimeInterval)? {
-        var deltas: [TimeInterval] = []
-        var prev: Date?
-        var lastTs: Date?
-        let n = self.points.count
-        for i in 0..<n {
-            let p = self.points[(self.head + i) % n]
-            if let p {
-                if let prev {
-                    let d = p.ts.timeIntervalSince(prev)
-                    if d > 0 { deltas.append(d) }
-                }
-                prev = p.ts
-                lastTs = p.ts
-            } else {
-                prev = nil
-            }
-        }
-        guard let lastTs, deltas.count >= 2 else { return nil }
-        deltas.sort()
-        return (lastTs, deltas[deltas.count / 2])
+        self.history.orderedValues()
     }
     
     public func addValue(_ value: Double) {
@@ -663,19 +615,7 @@ public class LineChartView: ChartView {
     }
     
     public func reinit(_ num: Int = 60) {
-        let num = max(num, 2)
-        self.write {
-            guard self.points.count != num else { return }
-            let ordered = self.orderedPointsLocked()
-            if num < ordered.count {
-                self.points = Array(ordered.suffix(num))
-            } else {
-                var arr: [DoubleValue?] = Array(repeating: nil, count: num)
-                arr.replaceSubrange((num-ordered.count)..<num, with: ordered)
-                self.points = arr
-            }
-            self.head = 0
-        }
+        self.write { self.history.resize(num) }
         self.onMain { [weak self] in
             self?.layer?.removeAnimation(forKey: "slide")
             self?.displayIfVisible()
@@ -692,10 +632,7 @@ public class LineChartView: ChartView {
     }
     
     public func setPoints(_ newPoints: [DoubleValue]) {
-        self.write {
-            self.points = newPoints.map { Optional($0) }
-            self.head = 0
-        }
+        self.write { self.history.replace(with: newPoints) }
         self.onMain { [weak self] in
             self?.layer?.removeAnimation(forKey: "slide")
             self?.displayIfVisible()

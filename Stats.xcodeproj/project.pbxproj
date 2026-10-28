@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A103AA030000000000000001 /* ChartHistoryBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA030000000000000002 /* ChartHistoryBuffer.swift */; };
+		A103AA040000000000000001 /* IOServiceProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA040000000000000002 /* IOServiceProperties.swift */; };
 		A103AA020000000000000001 /* MiniValuePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA020000000000000002 /* MiniValuePresentation.swift */; };
 		A103AA010000000000000001 /* ReaderWorkQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A103AA010000000000000002 /* ReaderWorkQueue.swift */; };
 		4A05F9BD83C04F70BFFF7F37 /* Kit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 369463B2B7EA4AF0A895A9B6 /* Kit.swift */; };
@@ -538,6 +540,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A103AA030000000000000002 /* ChartHistoryBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartHistoryBuffer.swift; sourceTree = "<group>"; };
+		A103AA040000000000000002 /* IOServiceProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOServiceProperties.swift; sourceTree = "<group>"; };
 		A103AA020000000000000002 /* MiniValuePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniValuePresentation.swift; sourceTree = "<group>"; };
 		A103AA010000000000000002 /* ReaderWorkQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderWorkQueue.swift; sourceTree = "<group>"; };
 		0192A7ED2B017E190056F918 /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hi; path = hi.lproj/Localizable.strings; sourceTree = "<group>"; };
@@ -1305,6 +1309,8 @@
 				5C038CF52D86EE8700516809 /* SystemStats.swift */,
 				9A2848022666AB2F00EC1F6D /* Store.swift */,
 				9A2848042666AB2F00EC1F6D /* Charts.swift */,
+				A103AA030000000000000002 /* ChartHistoryBuffer.swift */,
+				A103AA040000000000000002 /* IOServiceProperties.swift */,
 				9A2848032666AB2F00EC1F6D /* SystemKit.swift */,
 				9A2848072666AB3000EC1F6D /* Updater.swift */,
 				9A6EEBBD2685259500897371 /* Logger.swift */,
@@ -2254,6 +2260,8 @@
 				9A2847652666AA2700EC1F6D /* Memory.swift in Sources */,
 				9A2847642666AA2700EC1F6D /* Battery.swift in Sources */,
 				9A28480B2666AB3000EC1F6D /* Charts.swift in Sources */,
+				A103AA030000000000000001 /* ChartHistoryBuffer.swift in Sources */,
+				A103AA040000000000000001 /* IOServiceProperties.swift in Sources */,
 				9A2847632666AA2700EC1F6D /* Mini.swift in Sources */,
 				A103AA020000000000000001 /* MiniValuePresentation.swift in Sources */,
 				5E828A003074086000DB0CA0 /* Icon.swift in Sources */,
