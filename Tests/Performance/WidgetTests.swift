@@ -100,4 +100,38 @@ final class WidgetPerformanceTests: XCTestCase {
         drainMainQueue()
         XCTAssertGreaterThan(invalidations(view), 0)
     }
+
+    func testLineChartUsesExistingHistoryAndRefreshDoesNotAppendOrDrawWhileHidden() {
+        let history = LineChartData(num: 3)
+        for index in 0..<3 {
+            var point = DoubleValue(Double(index))
+            point.ts = Date(timeIntervalSince1970: Double(index))
+            history.append(point)
+        }
+        let view = LineChartView(num: 120, history: history)
+        XCTAssertEqual(history.capacity, 3)
+        var next = DoubleValue(3)
+        next.ts = Date(timeIntervalSince1970: 3)
+        view.addValue(next)
+        // The scale getter synchronizes with the chart's pending state writes.
+        view.setScale(.none)
+        XCTAssertEqual(history.snapshot().compactMap { $0?.value }, [1, 2, 3])
+        beginRecording(view)
+        for _ in 0..<1000 { view.refresh() }
+        drainMainQueue()
+        XCTAssertEqual(invalidations(view), 0)
+        XCTAssertEqual(history.snapshot().compactMap { $0?.value }, [1, 2, 3])
+    }
+
+    func testLineChartResizeAndReplacementUpdateItsSharedHistory() {
+        let history = LineChartData(num: 120)
+        let view = LineChartView(num: 120, history: history)
+        view.reinit(6)
+        view.setScale(.none)
+        XCTAssertEqual(history.capacity, 6)
+        view.setPoints([DoubleValue(0.2), DoubleValue(0.4)])
+        view.setScale(.none)
+        XCTAssertEqual(history.snapshot().compactMap { $0?.value }, [0.2, 0.4])
+        XCTAssertEqual(history.capacity, 2)
+    }
 }

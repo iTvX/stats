@@ -238,7 +238,7 @@ public class LineChartView: ChartView {
     
     private let dateFormatter = DateFormatter()
     
-    private var history: ChartHistoryBuffer<DoubleValue>
+    private let history: LineChartData
     private var shadowPoints: [DoubleValue?] = []
     private var transparent: Bool = true
     private var flipY: Bool = false
@@ -271,9 +271,10 @@ public class LineChartView: ChartView {
         scale: Scale = .none,
         fixedScale: Double = 1,
         zeroValue: Double = 0.01,
-        animation: Bool = true
+        animation: Bool = true,
+        history: LineChartData? = nil
     ) {
-        self.history = ChartHistoryBuffer(capacity: num, timestamp: { $0.ts })
+        self.history = history ?? LineChartData(num: num)
         self.suffix = suffix
         self.color = color
         self.scale = scale
@@ -577,13 +578,13 @@ public class LineChartView: ChartView {
     }
     
     public func addValue(_ value: DoubleValue) {
-        var value = value
-        if !value.value.isFinite {
-            let ts = value.ts
-            value = DoubleValue(0)
-            value.ts = ts
-        }
         self.write { self.history.append(value) }
+        self.refresh()
+    }
+
+    /// Refresh a view backed by independently sampled history without adding
+    /// another sample. Hidden views leave all drawing and animation work idle.
+    public func refresh() {
         self.onMain { [weak self] in
             guard let self, self.window?.isVisible ?? false else { return }
             let state = self.read { (n: self.history.capacity, xLegend: self.xLegend, yLegend: self.yLegend) }
@@ -607,7 +608,7 @@ public class LineChartView: ChartView {
     }
     
     private func orderedPointsLocked() -> [DoubleValue?] {
-        self.history.orderedValues()
+        self.history.snapshot()
     }
     
     public func addValue(_ value: Double) {
