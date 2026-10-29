@@ -21,7 +21,7 @@ concurrency:
 jobs:
   release:
     if: github.repository == 'iTvX/stats' && github.actor == 'iTvX' && (inputs.validate_only == true || github.ref == 'refs/heads/master')
-    runs-on: [self-hosted, macOS, ARM64, stats-local]
+    runs-on: [self-hosted, macOS, ARM64, stats-release]
     timeout-minutes: 90
     permissions:
       contents: write
