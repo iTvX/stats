@@ -1,3 +1,4 @@
 self-hosted-runner:
   labels:
     - stats-local
+    - stats-release
